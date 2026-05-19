@@ -1,11 +1,9 @@
 using Test
 using BenchmarkTools
 
-include("AlgebraicPowerSeries.jl")
+include("../AlgebraicPowerSeries.jl")
 
 @variables x y z t
-
-#-----------------------------------------------------------TaylorSeries-------------------------------------------------------------
 
 sin_ps = TaylorSeries{Float64}([x], [sin(x)], [0])
 compute_coefficients(sin_ps, 5)
@@ -47,13 +45,11 @@ push!(multidim_sin_cos_res, [0, 1, 1,  0,  0,  0, -1/6, -1/2, -1/2, -1/6, 0, 0, 
 push!(multidim_sin_cos_res, [1, 0, 0, -1/2, -1, -1/2,  0,  0,  0,  0, 1/24, 1/6, 1/4, 1/6, 1/24, 0, 0, 0, 0, 0, 0])
 @test multidim_sin_cos_ps.coefficients ≈ multidim_sin_cos_res
 
-# print("Time needed to compute coefficients of a 2x2 sin*cos matrix of 4 variables up to order 30 : ")
-# @btime begin
-# multidim_sintimescos_ps = TaylorSeries{Float64}([x,y,z,t], sin.([x;y;;z;t]).*cos(t), [0,0,0,0])
-# compute_coefficients(multidim_sintimescos_ps, 30)
-# end
+print("Time needed to compute coefficients of a 2x2 sin*cos matrix of 4 variables up to order 20 : ")
+@btime begin
+multidim_sintimescos_ps = TaylorSeries{Float64}([x,y,z,t], sin.([x;y;;z;t]).*cos(t), [0,0,0,0])
+compute_coefficients(multidim_sintimescos_ps, 20)
+end
 
 darctan_ps = TaylorSeries{Float64}([x], [1/(x^2+1)], [0])
-@profview compute_coefficients(darctan_ps, 10)
-
-#------------------------------------------------------------RecursiveSeries----------------------------------------------------
+@profview compute_coefficients(darctan_ps, 20)
