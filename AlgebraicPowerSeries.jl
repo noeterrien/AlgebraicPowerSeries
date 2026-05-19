@@ -506,14 +506,62 @@ function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict)
 end
 
 """
-    expand(ef::ExpandableFormula, indices_values::Dict{Num, Int})
+    substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict)
 
-    expands an ExpandableFormula to a single formula (instance of Num)
+    Replaces all occurences of the given fixed indices in ef and return the new 
+    corresponding ExpandableFormula
+
+    #Input
+
+    - `ef::ExpandableFormula` -- The ExpandableFormula to which the substitution must be
+      applied
+    - `fixed_indices_values::Dict` -- The index=>value substitution dictionary
+
+    #Output
+
+    An ExpandableFormula with the subtituted indices
+
+"""
+function substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict)
+    # efID::Symbol => same                                                           ✓
+    # sym::Num, => same                                                              ✓
+    # formula::Num, => substituted (indices, coeffs and efe)                         ✓
+    # fixed_indices::Vector, => substituted (indices)                                ✓
+    # varying_indices::Vector{Num},                                                  ✓
+    # varying_indices_ranges::Vector, => substituted (indices)                       ✓
+    # expandable_formulae::Vector{ExpandableFormula}, => substituted (indices, rec)  ✓
+    # series_coeffs::Vector{SeriesCoefficient}, => substituted (indices)             ✓
+    # func => same                                                                   ✓
+
+    new_fixed_indices = substitute_in_vector(ef.fixed_indices, fixed_indices_values)
+    new_varying_indices_ranges = substitute_in_pairs_vector(ef.varying_indices_ranges, fixed_indices_values)
+    new_series_coeffs = [substitute_coeff_indices(c, fixed_indices_values) for c in ef.series_coeffs]
+    new_expandable_formulae = [substitute_fixed_indices_in_ef(_ef, fixed_indices_values) for _ef in ef.expandable_formulae]
+
+    subst_dict = copy(fixed_indices_values)
+    for (new_c, c) in zip(new_series_coeffs, ef.series_coeffs)
+        subst_dict[c.unique_sym] = new_c.unique_sym
+    end
+    for (new_ef, ef) in zip(new_expandable_formulae, ef.expandable_formulae)
+        subst_dict[ef.unique_sym] = new_ef.unique_sym
+    end
+
+    new_formula = substitute(ef.formula, subst_dict)
+
+    ExpandableFormula(ef.efID, ef.sym, new_formula, new_fixed_indices, ef.varying_indices, 
+                      new_varying_indices_ranges, new_expandable_formulae, 
+                      new_series_coeffs, ef.func)
+end
+
+"""
+    expand(ef::ExpandableFormula, indices_values::Dict{Num, Num})
+
+    Expands an ExpandableFormula to a single formula (instance of Num)
 
     ###Input
 
     - `ef::ExpandableFormula` -- The formula to expand
-    - `fixed_indices_values::Dict` -- Fixed values that must be attributed to fixed
+    - `fixed_indices_values::Dict{Num, Num}` -- Fixed values that must be attributed to fixed
       indices before expanding. All other indices values must be deducible from these ones
 
 
@@ -522,103 +570,58 @@ end
     An instance of Num representing the expanded formula, and a Vector of unknown variables
     that appear in it
 """
-function expand(ef::ExpandableFormula, fixed_indices_values::Dict)
+function expand(ef::ExpandableFormula, fixed_indices_values::Dict{Num, Num})
 
-    
-    subst_fixed = substitute_in_vector(ef.fixed_indices, fixed_indices_values)
-    subst_var_rgs = substitute_in_pairs_vector(ef.varying_indices_ranges,
-                                               fixed_indices_values)
-    subst_formula_dict = Dict()
-    subst_scs = []
-    for sc in ef.series_coeffs
-        fixed_sc = substitute_coeff_indices(sc, fixed_indices_values)
-        subst_formula_dict[sc.unique_sym] = fixed_sc.unique_sym
-        push!(subst_scs, fixed_sc)
-    end
-    @show ef.formula
-    @show subst_formula_dict
-    @show subst_formula = substitute(ef.formula, subst_formula_dict)
-    subst_formula = substitute(subst_formula, fixed_indices_values)
-
-    fixed_ef = ExpandableFormula(ef.efID, ef.sym, subst_formula,
-                                 subst_fixed,
-                                 ef.varying_indices,
-                                 subst_var_rgs,
-                                 ef.expandable_formulae,
-                                 subst_scs,
-                                 ef.func)
-
+    if isempty(ef.varying_indices) # all indices values are stored in fixed_indices_values
         
-    
-    if fixed_ef.varying_indices_ranges == [] # base case base case
-
-        #substitute all known coefficients
-        return substitute_known(fixed_ef.formula, fixed_ef.series_coeffs)
-
-
-    elseif fixed_ef.expandable_formulae == [] # base case
+        new_ef = substitute_fixed_indices_in_ef(ef, fixed_indices_values)
         
-        unknowns = [] # powerseries coefficients that have not been computed yet (bc cannot be)
-        all_expanded = []
-        for i in Symbolics.value(fixed_ef.varying_indices_ranges[1][1]):Symbolics.value(
-                                 fixed_ef.varying_indices_ranges[1][2])
+        if isempty(new_ef.expandable_formulae)
             
-            # substitute in indices 
-            new_fixed = copy(fixed_ef.fixed_indices)
-            push!(new_fixed, fixed_ef.varying_indices[1])
-            new_varying = fixed_ef.varying_indices[2:end]
-            new_varying_ranges = substitute_in_pairs_vector(fixed_ef.varying_indices_ranges[2:end],
-                                                            Dict(fixed_ef.varying_indices[1]=>i))
-            new_fixed_values = copy(fixed_indices_values)
-            new_fixed_values[fixed_ef.varying_indices[1]] = i
+            return new_ef.formula, new_ef.series_coeffs
+        
+        else
 
-
-            # substitute in formula series coefficients
-            new_scs = []
-            subst_dict = Dict{Num, Num}()
-            for coeff in ef.series_coeffs
-
-                new_coeff = substitute_coeff_indices(coeff, Dict(ef.varying_indices[1]=>i))
-                push!(new_scs, new_coeff)
-
-                subst_dict[coeff.unique_sym] = new_coeff.unique_sym
+            fully_expanded_formulae, fully_expanded_unknowns = [], []
+            for to_expand in new_ef.expandable_formulae
+                to_expand_formula, to_expand_unknowns = expand(to_expand, Dict())
+                push!(fully_expanded_formulae, to_expand_formula)
+                fully_expanded_unknowns = [fully_expanded_unknowns;to_expand_unknowns]
             end
+            fully_expanded_formula = ef.func(fully_expanded_formulae)
 
-            # substitute in formula
-            subst_dict[fixed_ef.varying_indices[1]] = i
-            expanded_formula = substitute(fixed_ef.formula, subst_dict)
-            expanded_ef = ExpandableFormula(fixed_ef.efID,
-                                            fixed_ef.sym, 
-                                            expanded_formula, 
-                                            new_fixed,
-                                            new_varying,
-                                            new_varying_ranges,
-                                            [],
-                                            new_scs,
-                                            fixed_ef.func)
-            
-            
-            expanded, coeffs = expand(expanded_ef, new_fixed_values)
-            unknowns = [unknowns;coeffs]
-            push!(all_expanded, expanded)
+            return fully_expanded_formula, fully_expanded_unknowns
+
         end
 
-        return fixed_ef.func(all_expanded), unknowns
+    else # varying indices must be treated
 
-    else # need to expand other formulae first
-        
-        unknowns = [] # powerseries coefficients that have not been computed yet (bc cannot be)
-        all_expanded = []
-        for to_expand in ef.expandable_formulae
-            expanded, coeffs = expand(to_expand, fixed_indices_values)
-            push!(all_expanded, expanded)
-            push!(unknowns, coeffs)
+        # compute the range of the first varying index
+        a = Symbolics.value(substitute(ef.varying_indices_ranges[1][1], fixed_indices_values))
+        b = Symbolics.value(substitute(ef.varying_indices_ranges[1][2], fixed_indices_values))
+
+        # compute all the sub-ExpandableFormulae
+        fully_expanded_formulae, fully_expanded_unknowns = [], []
+        for i in a:b 
+            new_fixed_indices = copy(ef.fixed_indices)
+            new_varying_indices = ef.varying_indices[2:end]
+            new_varying_indices_ranges = ef.varying_indices_ranges[2:end]
+            new_fixed_indices_values = copy(fixed_indices_values)
+            new_fixed_indices_values[ef.varying_indices[1]] = i
+
+            to_expand = ExpandableFormula(ef.efID, ef.sym, ef.formula, new_fixed_indices,
+                                          new_varying_indices, new_varying_indices_ranges, 
+                                          ef.expandable_formulae, ef.series_coeffs, ef.func)
+
+            to_expand_formula, to_expand_unknowns = expand(to_expand, new_fixed_indices_values)
+            push!(fully_expanded_formulae, to_expand_formula)
+            fully_expanded_unknowns = [fully_expanded_unknowns; to_expand_unknowns]
         end
-        
-        
-        return fixed_ef.func(all_expanded), unknowns 
+
+        return ef.func(fully_expanded_formulae), fully_expanded_unknowns
 
     end
+
 end
 
 """

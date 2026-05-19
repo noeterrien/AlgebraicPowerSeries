@@ -27,7 +27,7 @@ R1 = RecurrentRelation(Kᵢ₀ ~ 0, [i], [(0,:∞)], [sc_Kᵢ₀], [])
 
 sum(formulae::Vector) = +(formulae...)
 ef_Σⱼ₌₀ⁱKᵢⱼ = ExpandableFormula(:Σⱼ₌₀ⁱKᵢⱼ, Σⱼ₌₀ⁱKᵢⱼ, Kᵢⱼ, [i], [j], [(0,i)], [], [sc_Kᵢⱼ], sum)
-println(expand(ef_Σⱼ₌₀ⁱKᵢⱼ, Dict(i=>5)))
+println(expand(ef_Σⱼ₌₀ⁱKᵢⱼ, Dict(i=>Num(5))))
 R2 = RecurrentRelation(ef_Σⱼ₌₀ⁱKᵢⱼ ~ -λᵢ₋₁/(2*i), [i], [(1,:∞)], [sc_λᵢ₋₁], [ef_Σⱼ₌₀ⁱKᵢⱼ])
 
 
