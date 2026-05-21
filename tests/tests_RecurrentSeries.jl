@@ -3,7 +3,9 @@ using BenchmarkTools
 
 include("../AlgebraicPowerSeries.jl")
 
-@variables x ξ
+@variables x y
+
+#----------------------------------1-D reaction diffusion equation with space-varying reaction------------------------------------
 
 ∑λᵢ = TaylorSeries{Float64}(:sin, [x], [sin(x)], [0])
 compute_coefficients(∑λᵢ, 10)
@@ -33,7 +35,7 @@ ef_B₍ᵢ₋₂₎ⱼ = ExpandableFormula(:B₍ᵢ₋₂₎ⱼ , B₍ᵢ₋₂�
 R3 = RecurrentRelation((i-j)*(i-j-1)*Kᵢⱼ - (j+2)*(j+1)*Kᵢ₍ⱼ₊₂₎ ~ B₍ᵢ₋₂₎ⱼ, [i,j], 
                        [(2,:∞),(0,i-2)], [sc_Kᵢⱼ, sc_Kᵢ₍ⱼ₊₂₎], [ef_B₍ᵢ₋₂₎ⱼ]);
 
-rs = RecurrentSeries{Float64}(:K, (1,), [x,ξ], [0,0], [R1, R2, R3])
+rs = RecurrentSeries{Float64}(:K, (1,), [x,y], [0,0], [R1, R2, R3])
 compute_coefficients(rs, 3)
 
 @test rs.coefficients[1] ≈ [0,0,0,0,-1/4,0,0,0,0,0]
