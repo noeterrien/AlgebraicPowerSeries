@@ -65,9 +65,7 @@ function get_matrix_index(c_lab::String)
     for c in c_lab[beg_parenthesis+1:end_parenthesis-1]
         if c == ','
             push!(str_idx, "")
-        elseif c == ' ' #skip
-            break
-        else # c is a number
+        elseif c != ' ' # c is a number, skip spaces
             str_idx[end] *= c
         end
     end

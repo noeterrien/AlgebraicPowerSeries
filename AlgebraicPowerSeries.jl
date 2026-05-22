@@ -103,7 +103,7 @@ end
 
     - `SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol}, 
                          sym::Num,
-                         indices_expr::Vector{Num}
+                         indices_expr::Vector
                          indices::Vector{Num},
                          index::NTuple{Int, D}) where D` -- default constructor
 
@@ -112,14 +112,14 @@ struct SeriesCoefficient{D}
     ps::Union{AbstractPowerSeries{D}, Symbol}
     sym::Num
     unique_sym::Num
-    indices_expr::Vector{Num}
+    indices_expr::Vector
     indices::Vector{Num}
     index::NTuple{D, Int}
 end
 
 function SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol},
                            sym::Num,
-                           indices_expr::Vector{Num},
+                           indices_expr::Vector,
                            indices::Vector{Num},
                            index::NTuple{D,Int}) where D
 
@@ -222,7 +222,7 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
     - `TaylorSeries{T}(seriesID::Symbol,
                        variables::Vector{Num}, 
-                       Array{Num, D},
+                       func::Array{Num, D},
                        center::Vector)` -- default constructor
 """
 mutable struct TaylorSeries{T,D} <: PowerSeries{T,D}
@@ -589,18 +589,20 @@ function expand(ef::ExpandableFormula, fixed_indices_values::Dict)
     if isempty(ef.varying_indices) # all indices values are stored in fixed_indices_values
         
         new_ef = substitute_fixed_indices_in_ef(ef, fixed_indices_values)
+        res_formula, res_unknowns = substitute_known(new_ef.formula, new_ef.series_coeffs)
         
         if isempty(new_ef.expandable_formulae)
             
-            res_formula, res_unknowns = substitute_known(new_ef.formula, new_ef.series_coeffs)
             return res_formula, getUniqueSym.(res_unknowns)
         
         else
 
-            fully_expanded_formulae, fully_expanded_unknowns = [], []
+            fully_expanded_formulae, fully_expanded_unknowns = Num[], getUniqueSym.(res_unknowns)
             for to_expand in new_ef.expandable_formulae
                 to_expand_formula, to_expand_unknowns = expand(to_expand, Dict())
-                push!(fully_expanded_formulae, to_expand_formula)
+                expanded_formula = substitute(res_formula, Dict(to_expand.unique_sym=>
+                                                                      to_expand_formula))
+                push!(fully_expanded_formulae, expanded_formula)
                 fully_expanded_unknowns = [fully_expanded_unknowns;to_expand_unknowns]
             end
             fully_expanded_formula = ef.func(fully_expanded_formulae)
@@ -895,5 +897,8 @@ function compute_coefficients(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
         ps.coefficients[idx] = order_lex(unordered_coeffs_labels[idx], 
                                          unordered_coeffs_values[idx])
     end
-    
+
+    for eq in equations[[6,12,20,21,23,24]]
+        println(eq)
+    end
 end
