@@ -145,3 +145,7 @@ compute_coefficients!(coupled_rs, N)
 @test coupled_rs.coefficients[1,2][1:6] ≈ [0, 1/4, 1/4, 3/32, -1/16, -9/32]
 @test coupled_rs.coefficients[2,1][1:6] ≈ [-1/2, -1/8, 3/8, 5/64, 5/32, 17/64]
 @test coupled_rs.coefficients[2,2][1:6] ≈ [-1/2, -1/8, 5/8, 5/64, 3/32, -43/64]
+
+built_function = build(coupled_rs, 2)
+@test built_function(0,0) ≈ [0;-1/2;;0;-1/2]
+@test built_function(1,1) ≈ [-1/4;1/4;;1/4;-1/2]

@@ -130,3 +130,37 @@ function decode_coeffIndexAndIndices(u_sym::Num)::Tuple{Vector{Int}, Int}
     midx, convertIndices(sidc...)
 
 end
+
+
+"""
+    compute_monomials(N::Int, variables::Vector{Num})::Vector{Num}
+
+    Computes the monomials of variables up to order N
+
+    ###Input
+
+    - `N::Int` -- The order up to which the monomials should be computed
+    - `variables::Vector{Num}` -- The variables these monomials migth depend on
+      (assume they commute !)
+      
+    ###Output
+
+    A Vector{Num} of the monomials in increasing order. For instance, for 3 variables
+    x, y, z, it would be [Num(1), x, y, z, x², xy, xz, y², yz, z², ...]
+"""
+function compute_monomials(N::Int, variables::Vector{Num})::Vector{Num}
+    monomials = Num[Num(1)]
+    mult_start_at = ones(Int, length(variables))
+
+    for _ in 1:N
+        l_monom = length(monomials)
+        for (i,v) in enumerate(variables)
+            for j in mult_start_at[i]:l_monom
+                push!(monomials, v*monomials[j])
+            end
+            mult_start_at[i] += length(monomials)-l_monom
+        end
+    end
+    
+    monomials
+end

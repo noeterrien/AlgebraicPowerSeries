@@ -66,6 +66,87 @@ function Base.getindex(ps::PowerSeries{T,Dps}, I::Vararg{Int64,Didx}) where {T,D
 end
 
 """
+    build_matrix_elt(ps::PowerSeries, N::Int)
+
+    Builds the polynomial function from the series coefficients. Returns a matrix of
+    functions instead of a function that returns matrices
+
+    ###Input
+
+    - `ps::PowerSeries` -- The PowerSeries from which one wants to compute the function
+    - `N::Int` -- The order up to which the polynomial should be built. If not given,
+      computes up to the series current order
+
+    ###Output
+
+    A matrix of function of ps variables. (i.e if ps is a PowerSeries of n variables, and
+    size (a,b), a matrix of size (a,b) of functions of the n variables, in the same order)
+
+    Returns the null function if N<0
+"""
+function build_matrix_elt(ps::PowerSeries, N::Int)
+
+    if N > ps.order 
+        compute_coefficients!(ps, N)
+    end
+
+    # handle N<0 case
+    N >= 0 || return function(args...)
+        length(args) == length(ps.variables) || throw(ArgumentError("Wrong number of arguments"))
+        zeros(eltype(args), ps.size)
+    end
+    
+    monomials = compute_monomials(N, ps.variables)
+    to_build = zeros(Num, ps.size)
+    for i in eachindex(ps.coefficients)
+        to_build[i] = sum(ps[i][1:length(monomials)] .* monomials)
+    end
+
+    map(x -> build_function(x, ps.variables; expression=Val{false}), to_build)
+end
+
+build_matrix_elt(ps::PowerSeries) = build_matrix_elt(ps, ps.order)
+
+"""
+    build(ps::PowerSeries, N::Int)
+
+    Builds the polynomial function from the series coefficients. 
+
+    ###Input
+
+    - `ps::PowerSeries` -- The PowerSeries from which one wants to compute the function
+    - `N::Int` -- The order up to which the polynomial should be built. If not given,
+      computes up to the current series order
+
+    ###Output
+
+    A function of ps variables. (i.e if ps is a PowerSeries of n variables, a function of
+    n variables in the same order)
+
+    Returns the null function if N<0
+"""
+function build(ps::PowerSeries, N::Int)
+
+    built = build_matrix_elt(ps, N)
+
+    return function(args...)
+        length(args) == length(ps.variables) || throw(ArgumentError("Wrong number of arguments"))
+        T = typeof(built[1](args))
+        res = Array{T}(undef, ps.size)
+        for i in eachindex(res)
+            res[i] = built[i](args)
+        end
+        res
+    end
+end
+
+build(ps::PowerSeries) = build(ps, ps.order)
+
+
+
+#-------------------------------------------------------SeriesCoefficient-------------------------------------------------------
+
+"""
     SeriesCoefficient{D}
 
     A type to represent a PowerSeries coefficient. 
@@ -810,7 +891,7 @@ end
                          center::Vector,
                          relations::Vector{RecurrentRelation})` -- default constructor
 """
-struct RecurrentSeries{T,D} <: PowerSeries{T,D}
+mutable struct RecurrentSeries{T,D} <: PowerSeries{T,D}
 
     seriesID::Symbol
     size::NTuple{D,Int}
@@ -874,5 +955,6 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
     for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 
         ps.coefficients[idx[1]...][idx[2]] = val
     end
+    ps.order = N
     
 end
