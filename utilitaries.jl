@@ -45,45 +45,88 @@ substitute_in_vector(lst::Vector, d::Dict) = [substitute(x, d) for x in lst]
 
 intparse(s::String) = parse(Int, s)
 
-"""
-    get_matrix_index(c_lab::String)
 
-    Retrieves the matrix index of a series coefficient from its unique identifier
+
+"""
+    decode_IntVector(t::String)::Vector{Int}
+
+    Parses a Vector of Int written as a string to a Vector
 
     ###Input
-    - `c_lab::String` -- A series coefficient unique identifier, parsed as a String using
-      string(::Num)
 
+    -  `t::String` -- a String of the form "a, b, c, ..." a, b, c, ... isa Int
+    
     ###Output
-    A Vector{Int64} representing the index of the coefficient in the matrix
-"""
-function get_matrix_index(c_lab::String)
-    beg_parenthesis = findfirst('(', c_lab)
-    end_parenthesis = findfirst(')', c_lab)
 
-    str_idx = [""]
-    for c in c_lab[beg_parenthesis+1:end_parenthesis-1]
+    The Vector [a, b, c, ...]
+"""
+function decode_IntVector(t::String)::Vector{Int}
+    str_res = [""]
+    for c in t
         if c == ','
-            push!(str_idx, "")
-        elseif c != ' ' # c is a number, skip spaces
-            str_idx[end] *= c
+            push!(str_res, "")
+        elseif c != ' ' # c is a number, and skip spaces
+            str_res[end] *= c
         end
     end
 
-    str_idx = str_idx[end] == "" ? str_idx[1:end-1] : str_idx # Handle 1-dimensional case
-
-    intparse.(str_idx)
-
+    intparse.(str_res)
 end
 
+"""
+    convertIndices(I::Vararg{Int64, Didx}) where Didx
+
+    Converts indices of the form a₀₀₀ + a₁₀₀ x + a₁₁₀ y + a₁₁₁ z + a₂₀₀ x² + a₂₁₀ xy + 
+    a₂₁₁ xz + a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ... to an index of the the form 
+    b₁ + b₂ x + b₃ y + b₄ z + b₅ x² + b₆ xy + b₇ xz + b₈ y² + b₉ yz + b₁₀ z² + ... 
+"""
+function convertIndices(I::Vararg{Int64, Didx}) where Didx
+    idx = 1
+    for (n,i) in zip(Didx:-1:1, I)
+        idx += Base.sum([binomial(k+n-1,n-1) for k in 0:i-1])
+    end
+    idx
+end
 
 """
-    order_lex(labels::Vector, values::Vector)
+    decode_coeffIndex(u_sym::Num)::Tuple{Vector{Int}, Int}
 
-    Orders labels in lexicographical order and performs the corresponding reordering in
-    values Vector, returning the vector of values
+    Returns a Tuple{Vector{Int}, Int}, the vector representing the coefficient index in the
+    matrix of series and the second element representing the index of the coefficient in
+    the series coefficients vector
 
     ###Input
+    
+    - `u_sym::Num` -- The unique symbol representing the coefficient in an expression.
+      This decoding function should work with any unique representation that have the
+      form "...(a, b, c, ...)...[d, e, f, ...]" where a, b, c,... are the series index
+      in the matrix of series and d, e, f, ... are the coefficient indices (The number of
+      indices is equal to the number of variables)
 
+    ###Output
+
+    A Tuple{Vector{Int}, Int}
 """
-order_lex(labels::Vector{String}, values::Vector) = values[sortperm(labels)]
+function decode_coeffIndexAndIndices(u_sym::Num)::Tuple{Vector{Int}, Int}
+
+    str_sym = string(u_sym)
+    
+    # matrix index
+    beg_parenthesis = findfirst('(', str_sym)
+    end_parenthesis = findfirst(')', str_sym)
+
+    str_sym[end_parenthesis-1] == ',' && (end_parenthesis -= 1) # handle 1D case
+    
+    midx = decode_IntVector(str_sym[beg_parenthesis+1:end_parenthesis-1])
+
+
+    # series coefficient index
+    beg_parenthesis = findfirst('[', str_sym)
+    end_parenthesis = findfirst(']', str_sym)
+
+    sidc = decode_IntVector(str_sym[beg_parenthesis+1:end_parenthesis-1])
+
+    # return
+    midx, convertIndices(sidc...)
+
+end

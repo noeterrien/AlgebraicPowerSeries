@@ -26,25 +26,10 @@ abstract type AbstractPowerSeries{D} end
       [a₀₀₀, a₁₀₀, a₁₁₀, a₁₁₁, a₂₀₀, a₂₁₀, a₂₁₁, a₂₂₀, a₂₂₁, a₂₂₂, ...]
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
 
-    - `compute_coefficients(ps::PowerSeries, N::Int)` -- computes the coefficients up to 
+    - `compute_coefficients!(ps::PowerSeries, N::Int)` -- computes the coefficients up to 
       order N
 """
 abstract type PowerSeries{T,D} <: AbstractPowerSeries{D} end  
-
-"""
-    convertIndices(I::Vararg{Int64, Didx}) where Didx
-
-    Converts indices of the form a₀₀₀ + a₁₀₀ x + a₁₁₀ y + a₁₁₁ z + a₂₀₀ x² + a₂₁₀ xy + 
-    a₂₁₁ xz + a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ... to an index of the the form 
-    b₁ + b₂ x + b₃ y + b₄ z + b₅ x² + b₆ xy + b₇ xz + b₈ y² + b₉ yz + b₁₀ z² + ... 
-"""
-function convertIndices(I::Vararg{Int64, Didx}) where Didx
-    idx = 1
-    for (n,i) in zip(Didx:-1:1, I)
-        idx += Base.sum([binomial(k+n-1,n-1) for k in 0:i-1])
-    end
-    idx
-end
 
 """
     Base.getindex(ps::PowerSeries{Dps}, I::Vararg{Int64,Didx}) where {Dps,Didx}
@@ -266,7 +251,7 @@ function TaylorSeries{T}(seriesID::Symbol,
 end
 
 """
-    compute_coefficients(ps::TaylorSeries, N::Int)
+    compute_coefficients!(ps::TaylorSeries, N::Int)
 
     Computes the coefficients of a TaylorSeries up to order N
 
@@ -279,14 +264,14 @@ end
 
     Nothing
 """
-function compute_coefficients(ps::TaylorSeries{T}, N::Int) where T
+function compute_coefficients!(ps::TaylorSeries{T}, N::Int) where T
     # first check to which order coefficients have already been computed
     if ps.order >= N
         return
     else
         # compute up to order N
         if ps.order < N-1
-            compute_coefficients(ps, N-1)
+            compute_coefficients!(ps, N-1)
         end
 
         # compute derivatives and factorials
@@ -849,7 +834,7 @@ end
 
 
 """
-    compute_coefficients(ps::RecurrentSeries, N::Int)
+    compute_coefficients!(ps::RecurrentSeries, N::Int)
 
     Computes the coefficients of a RecurrentSeries up to order N
 
@@ -862,7 +847,7 @@ end
 
     Nothing
 """
-function compute_coefficients(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
+function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
 
     # Expand all equations
     equations, unknowns = Equation[], Num[]
@@ -877,28 +862,17 @@ function compute_coefficients(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
     unsorted_coeffs = symbolic_linear_solve(equations, unknowns)
     unsorted_coeffs = Symbolics.value.(unsorted_coeffs)
 
-    # attribute to each series matrix element
-    unordered_coeffs_labels = Array{Vector{String},D}(undef, ps.size)
-    unordered_coeffs_values = Array{Vector{T},D}(undef, ps.size)
-    for idx in eachindex(unordered_coeffs_labels)
-        unordered_coeffs_labels[idx] = []
-        unordered_coeffs_values[idx] = []
+    # set series coefficients
+    unknowns_idx = decode_coeffIndexAndIndices.(unknowns)
+    ## find maximum series coefficient index
+    max_idx = maximum(t -> t[2], unknowns_idx)
+    ## set ps.coefficients to the correct dimensions
+    for i in eachindex(ps.coefficients)
+        ps.coefficients[i] = Vector{T}(undef, max_idx+1)
     end
-    for (c_lab, c_val) in zip(unknowns, unsorted_coeffs)
-        str_c_lab = string(c_lab)
-        idx = get_matrix_index(str_c_lab)
-        push!(unordered_coeffs_labels[idx...], str_c_lab)
-        push!(unordered_coeffs_values[idx...], c_val)
+    ## fill
+    for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 
+        ps.coefficients[idx[1]...][idx[2]] = val
     end
-
-
-    # order coefficients correctly
-    for idx in eachindex(unordered_coeffs_labels)
-        ps.coefficients[idx] = order_lex(unordered_coeffs_labels[idx], 
-                                         unordered_coeffs_values[idx])
-    end
-
-    for eq in equations[[6,12,20,21,23,24]]
-        println(eq)
-    end
+    
 end

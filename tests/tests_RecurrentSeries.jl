@@ -9,7 +9,7 @@ include("../AlgebraicPowerSeries.jl")
 #----------------------------------1-D reaction diffusion equation with space-varying reaction------------------------------------
 
 # ∑λᵢ = TaylorSeries{Float64}(:sin, [x], [sin(x)], [0])
-# compute_coefficients(∑λᵢ, 10)
+# compute_coefficients!(∑λᵢ, 10)
 
 # @variables Kᵢ₀ Kᵢⱼ Kᵢ₍ⱼ₊₂₎ Kₖⱼ
 # @variables λᵢ₋₁ λᵢ₋₂₋ₖ
@@ -36,20 +36,20 @@ include("../AlgebraicPowerSeries.jl")
 #                        [(2,:∞),(0,i-2)], [sc_Kᵢⱼ, sc_Kᵢ₍ⱼ₊₂₎], [ef_B₍ᵢ₋₂₎ⱼ]);
 
 # rs = RecurrentSeries{Float64}(:K, (1,), [x,y], [0,0], [R1, R2, R3])
-# compute_coefficients(rs, 3)
+# compute_coefficients!(rs, 3)
 
 # @test rs.coefficients[1] ≈ [0,0,0,0,-1/4,0,0,0,0,0]
 
 #-----------------------------------------------2x2 1-D linear hyperbolic system--------------------------------------------------
 # parameters
-N=2
+N=10
 q = 1
 
 # Σ function and coefficients
 ϵ₁ = TaylorSeries{Float64}(:ϵ₁, [x], [1+x^2], [0])
 ϵ₂ = TaylorSeries{Float64}(:ϵ₂, [x], [exp(x)], [0])
-compute_coefficients(ϵ₁, N+1)
-compute_coefficients(ϵ₂, N+1)
+compute_coefficients!(ϵ₁, N+1); println("coefficients computed for ϵ₁ up to order $(N+1)")
+compute_coefficients!(ϵ₂, N+1); println("coefficients computed for ϵ₂ up to order $(N+1)")
 @variables ϵ¹₀ ϵ¹ᵢ₋ₖ ϵ¹ᵢ₋₁₋ⱼ₋ₖ  ϵ¹ⱼ₋ₖ ϵ¹ⱼ₋ₖ₊₁
 @variables ϵ²₀ ϵ²ᵢ₋ₖ ϵ²ᵢ₋₁₋ⱼ₋ₖ  ϵ²ⱼ₋ₖ ϵ²ⱼ₋ₖ₊₁
 c_ϵ¹₀       = SeriesCoefficient(ϵ₁, ϵ¹₀      , [0]      , Num[]      , (1,))
@@ -66,8 +66,8 @@ c_ϵ²ⱼ₋ₖ₊₁   = SeriesCoefficient(ϵ₂, ϵ²ⱼ₋ₖ₊₁  , [j-k+1
 # C function and coefficients
 c₂ = TaylorSeries{Float64}(:c₂, [x], [sin(x)], [0])
 c₃ = TaylorSeries{Float64}(:c₃, [x], [cos(x)], [0])
-compute_coefficients(c₂, N)
-compute_coefficients(c₃, N)
+compute_coefficients!(c₂, N); println("coefficients computed for c₂ up to order $N")
+compute_coefficients!(c₃, N); println("coefficients computed for c₃ up to order $N")
 @variables c²ᵢ c²ⱼ₋ₖ c³ᵢ c³ⱼ₋ₖ
 c_c²ᵢ     = SeriesCoefficient(c₂, c²ᵢ  , [i]  , [i]  , (1,))
 c_c²ⱼ₋ₖ   = SeriesCoefficient(c₂, c²ⱼ₋ₖ, [j-k], [j,k], (1,))
@@ -138,8 +138,10 @@ R34 = RecurrentRelation(Σϵ²xd_xKvv+Σϵ²yd_yKvv ~ -Σdϵ²yKvv + Σc²yKvu, 
 
 coupled_rs = RecurrentSeries{Float64}(:crs, (2,2), [x,y], [0,0], [R11, R12, R21, R22, R31, R32, R33, R34])
 
-compute_coefficients(coupled_rs, N)
-@test coupled_rs.coefficients[1,1] ≈ [0, 1/4, -1/4, 3/32, -7/16, 3/32]
-@test coupled_rs.coefficients[1,2] ≈ [0, 1/4, 1/4, 3/32, -1/16, -9/32]
-@test coupled_rs.coefficients[2,1] ≈ [-1/2, -1/8, 3/8, 5/64, 5/32, 17/64]
-@test coupled_rs.coefficients[2,2] ≈ [-1/2, -1/8, 5/8, 5/64, 3/32, -43/64]
+# print("Coefficients computation for hyperbolic 2x2 series up to order $N takes on average : ")
+# @btime compute_coefficients!(coupled_rs, N); 
+compute_coefficients!(coupled_rs, N)
+@test coupled_rs.coefficients[1,1][1:6] ≈ [0, 1/4, -1/4, 3/32, -7/16, 3/32]
+@test coupled_rs.coefficients[1,2][1:6] ≈ [0, 1/4, 1/4, 3/32, -1/16, -9/32]
+@test coupled_rs.coefficients[2,1][1:6] ≈ [-1/2, -1/8, 3/8, 5/64, 5/32, 17/64]
+@test coupled_rs.coefficients[2,2][1:6] ≈ [-1/2, -1/8, 5/8, 5/64, 3/32, -43/64]
