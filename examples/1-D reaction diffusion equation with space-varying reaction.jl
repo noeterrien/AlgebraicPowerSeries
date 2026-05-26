@@ -77,7 +77,7 @@ begin
 	sc_Kₖⱼ     = SeriesCoefficient(:self, Kₖⱼ, [k,j], [k,j], (1,))
 
 	sc_λᵢ₋₁ = SeriesCoefficient(∑λᵢ, λᵢ₋₁, [i-1], [i], (1,))
-	sc_λᵢ₋₂₋ₖ = SeriesCoefficient(∑λᵢ, λᵢ₋₂₋ₖ, [i-k], [i,k], (1,))
+	sc_λᵢ₋₂₋ₖ = SeriesCoefficient(∑λᵢ, λᵢ₋₂₋ₖ, [i-2-k], [i,k], (1,))
 end; nothing
 
 # ╔═╡ 0b60f870-f16f-426a-a7e4-38c06d44440c
@@ -148,6 +148,9 @@ x_values = [0; 0.5;; 0.75; 1]
 # ╔═╡ 41ad664a-2a31-400b-a4f2-5e71296b2beb
 bound_funcs = map(ω -> [μ -> func(ω,μ) for func in funcs], x_values); nothing
 
+# ╔═╡ c007fa4f-5ec6-4937-9ef8-4a9dbfa105c9
+rs.coefficients[1]
+
 # ╔═╡ 004bea75-8225-4a26-bf7a-f583e6b00b56
 md"""
 ##### Plotting
@@ -190,14 +193,14 @@ md"""
 ###### 3D
 """
 
-# ╔═╡ df3b9147-ee7a-4638-a9d8-8b18fcb565b9
-display(surface(range, range, [funcs[end](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=25", xlabel="x", ylabel="y", zlabel="K(x,y)")))
+# ╔═╡ 3faabdbc-5f89-4d4f-9e8c-facd5398793d
+display(surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=2", xlabel="x", ylabel="y", zlabel="K(x,y)")))
 
 # ╔═╡ bfa7aef2-24fb-429d-b648-2234f8547656
 display(surface(range, range, [funcs[end-1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=8", xlabel="x", ylabel="y", zlabel="K(x,y)")))
 
-# ╔═╡ 3faabdbc-5f89-4d4f-9e8c-facd5398793d
-display(surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=2", xlabel="x", ylabel="y", zlabel="K(x,y)")))
+# ╔═╡ df3b9147-ee7a-4638-a9d8-8b18fcb565b9
+display(surface(range, range, [funcs[end](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=25", xlabel="x", ylabel="y", zlabel="K(x,y)")))
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
@@ -233,6 +236,7 @@ display(surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(
 # ╠═dd8dc718-9aa4-4cc4-ad4a-9b979ad4eae2
 # ╠═13f578f8-0097-48c0-8c10-62fc1e20b6ed
 # ╠═41ad664a-2a31-400b-a4f2-5e71296b2beb
+# ╠═c007fa4f-5ec6-4937-9ef8-4a9dbfa105c9
 # ╟─004bea75-8225-4a26-bf7a-f583e6b00b56
 # ╟─0a633733-76cb-4363-b04a-6c0a9f660873
 # ╠═64d13d07-7a9f-4ab9-84ce-e9747222617e
@@ -241,6 +245,6 @@ display(surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(
 # ╠═d8e588a0-547c-4f24-8b09-713d15175314
 # ╠═14db96a9-f5d6-41fe-b747-9c730971a6a5
 # ╟─0074b6c6-c236-4d48-bff4-477cf0b8a350
-# ╠═df3b9147-ee7a-4638-a9d8-8b18fcb565b9
-# ╠═bfa7aef2-24fb-429d-b648-2234f8547656
 # ╠═3faabdbc-5f89-4d4f-9e8c-facd5398793d
+# ╠═bfa7aef2-24fb-429d-b648-2234f8547656
+# ╠═df3b9147-ee7a-4638-a9d8-8b18fcb565b9

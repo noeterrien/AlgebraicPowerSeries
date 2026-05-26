@@ -21,7 +21,7 @@ sc_Kᵢ₍ⱼ₊₂₎ = SeriesCoefficient(:self, Kᵢ₍ⱼ₊₂₎, [i,j+2], 
 sc_Kₖⱼ     = SeriesCoefficient(:self, Kₖⱼ, [k,j], [k,j], (1,))
 
 sc_λᵢ₋₁ = SeriesCoefficient(∑λᵢ, λᵢ₋₁, [i-1], [i], (1,))
-sc_λᵢ₋₂₋ₖ = SeriesCoefficient(∑λᵢ, λᵢ₋₂₋ₖ, [i-k], [i,k], (1,))
+sc_λᵢ₋₂₋ₖ = SeriesCoefficient(∑λᵢ, λᵢ₋₂₋ₖ, [i-2-k], [i,k], (1,))
 
 R1 = RecurrentRelation(Kᵢ₀ ~ 0, [i], [(0,:∞)], [sc_Kᵢ₀], [])
 

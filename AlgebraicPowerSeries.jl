@@ -65,6 +65,7 @@ function Base.getindex(ps::PowerSeries{T,Dps}, I::Vararg{Int64,Didx}) where {T,D
     end
 end
 
+#TODO : WARNING currently only works if center is 0
 """
     build_matrix_elt(ps::PowerSeries, N::Int)
 
