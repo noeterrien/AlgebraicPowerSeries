@@ -133,12 +133,7 @@ function build(ps::PowerSeries, N::Int)
 
     return function(args...)
         length(args) == length(ps.variables) || throw(ArgumentError("Wrong number of arguments"))
-        T = typeof(built[1](args))
-        res = Array{T}(undef, ps.size)
-        for i in eachindex(res)
-            res[i] = built[i](args)
-        end
-        res
+        map(b -> b(args...), built)
     end
 end
 

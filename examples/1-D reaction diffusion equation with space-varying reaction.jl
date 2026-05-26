@@ -148,9 +148,6 @@ x_values = [0; 0.5;; 0.75; 1]
 # ╔═╡ 41ad664a-2a31-400b-a4f2-5e71296b2beb
 bound_funcs = map(ω -> [μ -> func(ω,μ) for func in funcs], x_values); nothing
 
-# ╔═╡ c007fa4f-5ec6-4937-9ef8-4a9dbfa105c9
-rs.coefficients[1]
-
 # ╔═╡ 004bea75-8225-4a26-bf7a-f583e6b00b56
 md"""
 ##### Plotting
@@ -236,7 +233,6 @@ display(surface(range, range, [funcs[end](x,y) for x in range, y in range], axis
 # ╠═dd8dc718-9aa4-4cc4-ad4a-9b979ad4eae2
 # ╠═13f578f8-0097-48c0-8c10-62fc1e20b6ed
 # ╠═41ad664a-2a31-400b-a4f2-5e71296b2beb
-# ╠═c007fa4f-5ec6-4937-9ef8-4a9dbfa105c9
 # ╟─004bea75-8225-4a26-bf7a-f583e6b00b56
 # ╟─0a633733-76cb-4363-b04a-6c0a9f660873
 # ╠═64d13d07-7a9f-4ab9-84ce-e9747222617e
