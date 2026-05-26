@@ -97,12 +97,13 @@ function build_matrix_elt(ps::PowerSeries, N::Int)
     end
     
     monomials = compute_monomials(N, ps.variables)
+    monomials
     to_build = zeros(Num, ps.size)
     for i in eachindex(ps.coefficients)
         to_build[i] = sum(ps[i][1:length(monomials)] .* monomials)
     end
 
-    map(x -> build_function(x, ps.variables; expression=Val{false}), to_build)
+    map(expr -> build_function(expr, ps.variables...; expression=Val{false}), to_build)
 end
 
 build_matrix_elt(ps::PowerSeries) = build_matrix_elt(ps, ps.order)
@@ -397,6 +398,7 @@ function compute_coefficients!(ps::TaylorSeries{T}, N::Int) where T
 
         ps.order=N
 
+        return
     end
 end
 
@@ -949,12 +951,13 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
     max_idx = maximum(t -> t[2], unknowns_idx)
     ## set ps.coefficients to the correct dimensions
     for i in eachindex(ps.coefficients)
-        ps.coefficients[i] = Vector{T}(undef, max_idx+1)
+        ps.coefficients[i] = Vector{T}(undef, max_idx)
     end
     ## fill
     for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 
         ps.coefficients[idx[1]...][idx[2]] = val
     end
     ps.order = N
-    
+
+    return
 end
