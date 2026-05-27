@@ -124,23 +124,23 @@ $$\begin{cases}
 where $U$ is the actuation variable and $q$ in a non-zero parameter. The corresponding target system for backstepping is 
 
 $$\begin{cases}
-  \gamma_t = \Sigma(x) \gamma_x + \begin{pmatrix}
-    c_1(x) & 0 \\ 0 & c_4(x)
-  \end{pmatrix} \gamma\\
+  \gamma_t = \Sigma(x) \gamma_x + C_0 \gamma\\
   \alpha(0,t) = q\beta(0,t) \\
   \beta(1,t) = 0
 \end{cases}$$
 
-where $\gamma = \left[\alpha, \beta\right]^T$
+where $\gamma = \left[\alpha, \beta\right]^T$ and $C_0 = \begin{pmatrix} c_1(x) & 0 \\ 0 & c_4(x) \end{pmatrix}$
 
 \subsection{Kernel equations and control law}
 
 Using Volterra integral transformation, $\gamma = w - \int_{0}^{x}K(x,y)w(y,t) dy$, one obtains the following sufficient conditions : 
 
 \begin{align*}
-  \Sigma(x)K_x(x,y) + K_y(x,y)\Sigma(y) &= K(x,y)\left[C(y)-\Sigma'(y)\right] \\
-  K(x,x)\Sigma(x) - \Sigma(x)K(x,x) &= C(x) \\
-  K(x,0)\Sigma(0)w(0,t) &= 0
+  \Sigma(x)K_x(x,y) + K_y(x,y)\Sigma(y) &= K(x,y)\left[C(y)-\Sigma'(y)-C_0(x)\right] \\
+  K(x,x)\Sigma(x) - \Sigma(x)K(x,x) &= C(x) - C_0(x) \\
+  K(x,0)\Sigma(0)\begin{pmatrix}
+    q \\ 1
+  \end{pmatrix} &= 0
 \end{align*}
 
 Denoting $K(x,y) = \begin{pmatrix}
@@ -149,23 +149,22 @@ Denoting $K(x,y) = \begin{pmatrix}
 \end{pmatrix}$, these expressions can be developped into 
 
 \begin{align}
-  \epsilon_1(x)K^{uu}_x + \epsilon_1(y)K^{uu}_y &= -\left[c_1(y)+\epsilon_1'(y)\right]K^{uu} - c_3(y)K^{uv} \\
-  \epsilon_1(x)K^{uv}_x -\epsilon_2(y)K^{uv}_y &= \left[\epsilon_2'(y)-c_4(y)\right]K^{uv} -c_2(y)K^{uu} \\
-  \epsilon_2(x)K^{vu}_x - \varepsilon_1(y)K^{vu}_y &= \left[c_1(y) + \epsilon_1'(y)\right]K^{vu} + c_3(y)K^{vv} \\
-  \epsilon_2(x)K^{vv}_x + \epsilon_2(y)K^{vv}_y &= \left[c_4(y)-\epsilon_2'(y)\right]K^{vv}+ c_2(y)K^{vu}
+  \epsilon_1(x)K^{uu}_x + \epsilon_1(y)K^{uu}_y &= -\left[c_1(y)+\epsilon_1'(y)-c_1(x)\right]K^{uu} - c_3(y)K^{uv} \\
+  \epsilon_1(x)K^{uv}_x -\epsilon_2(y)K^{uv}_y &= \left[\epsilon_2'(y)-c_4(y)+c_4(x)\right]K^{uv} -c_2(y)K^{uu} \\
+  \epsilon_2(x)K^{vu}_x - \varepsilon_1(y)K^{vu}_y &= \left[c_1(y) + \epsilon_1'(y)-c_1(x)\right]K^{vu} + c_3(y)K^{vv} \\
+  \epsilon_2(x)K^{vv}_x + \epsilon_2(y)K^{vv}_y &= \left[c_4(y)-\epsilon_2'(y)-c_4(x)\right]K^{vv}+ c_2(y)K^{vu}
 \end{align}
 
 for the first relation and as
 
 \begin{align}
-  c_1 &= c_4 = 0 \\
   (\epsilon_1(x) + \epsilon_2(x))K^{uv}(x,x) &= c_2(x) \\
   (\epsilon_1(x) + \epsilon_2(x))K^{vu}(x,x) &= -c_3(x) \\
   K^{uu}(x,0) &= \frac{\epsilon_2(0)}{q\epsilon_1(0)}K^{uv}(x,0) \\
   K^{vu}(x,0) &= \frac{\epsilon_2(0)}{q\epsilon_1(0)}K^{vv}(x,0) 
 \end{align}
 
-for the boundary conditions. Notice that this \textbf{requires} $c_1=c_4=0$.
+for the boundary conditions. 
 
 The control law is then given by $U(t) = \int_{0}^{1}K^{vu}(1,y)u(y,t) + K^{vv}(1,y)v(y,t) dy$
 
@@ -183,11 +182,23 @@ $$K(x,y)=\begin{pmatrix}
 and 
 
 \begin{align*}
-  \epsilon_1(x) &= \sum_{i=0}^{+\infty} \epsilon^1_ix^i \text{ where } \epsilon^1_0 > 0 \\
-  \epsilon_2(x) &= \sum_{i=0}^{+\infty} \epsilon^2_ix^i \text{ where } \epsilon^2_0 > 0 \\
-  c_2(x) &= \sum_{i=0}^{+\infty} c^2_ix^i \\
-  c_3(x) &= \sum_{i=0}^{+\infty} c^3_ix^i
+  \Sigma(x) &= \begin{pmatrix}
+    -\epsilon_1(x) & 0 \\
+    0 & \epsilon_2(x)
+  \end{pmatrix} = \begin{pmatrix}
+    -\sum_{i=0}^{+\infty} \epsilon^1_ix^i & 0 \\
+    0 & \sum_{i=0}^{+\infty} \epsilon^2_ix^i
+  \end{pmatrix} \text{ where } \epsilon^1_0, \epsilon^2_0 > 0 \\
+  C(x) &= \begin{pmatrix}
+    c_1(x) & c_2(x) \\
+    c_3(x) & c_4(x)
+  \end{pmatrix} \text{\hspace{0.6em}} = \begin{pmatrix}
+    \sum_{i=0}^{+\infty} c^1_ix^i & \sum_{i=0}^{+\infty} c^2_ix^i \\
+    \sum_{i=0}^{+\infty} c^3_ix^i & \sum_{i=0}^{+\infty} c^4_ix^i
+  \end{pmatrix}
 \end{align*}
+  
+
 
 Using the following lemma, one can map (4)-(12) to their sum representations
 
@@ -205,7 +216,10 @@ Using the following lemma, one can map (4)-(12) to their sum representations
 \begin{align*}
   &\doubleSum{\sum_{k=0}^{i-j}(k+1)K^{uu}_{(k+j+1)j}\epsilon^1_{i-j-k}} + \doubleSum{\sum_{k=0}^{j}(k+1)K^{uu}_{(i-j+k+1)(k+1)}\epsilon^1_{j-k}} \\
   &= -\doubleSum{\sum_{k=0}^{j}(j-k+1)K^{uu}_{(i-j+k)k}\epsilon^1_{j-k+1}} - 
-  \doubleSum{\sum_{k=0}^{j}K^{uv}_{(i-j+k)k}c^3_{(j-k)}}
+  \doubleSum{\sum_{k=0}^{j}K^{uv}_{(i-j+k)k}c^3_{(j-k)}} \\
+  &\text{\hspace{1em}} 
+  +\doubleSum{\sum_{k=0}^{i-j}K^{uu}_{(k+j)j}c^1_{i-j-k}} - 
+  \doubleSum{\sum_{k=0}^{j}K^{uu}_{(i-j+k)k}c^1_{j-k}}
 \end{align*}
 
 identifying the coefficients, one gets the following recursive relation
@@ -214,7 +228,10 @@ identifying the coefficients, one gets the following recursive relation
   &\sum_{k=0}^{i-j} (k+1)K^{uu}_{(k+j+1)j}\epsilon^1_{i-j-k} + 
   \sum_{k=0}^{j} (k+1)K^{uu}_{(i-j+k+1)(k+1)}\epsilon^1_{j-k} \\
   &= -\sum_{k=0}^{j} (j-k+1)K^{uu}_{(i-j+k)k}\epsilon^1_{j-k+1}
-  -\sum_{k=0}^{j} K^{uv}_{(i-j+k)k}c^3_{j-k}
+  -\sum_{k=0}^{j} K^{uv}_{(i-j+k)k}c^3_{j-k} \\
+  &\text{\hspace{1em}}
+  + \sum_{k=0}^{i-j}K^{uu}_{(k+j)j}c^1_{i-j-k}
+  - \sum_{k=0}^{j}K^{uu}_{(i-j+k)k}c^1_{j-k}
 \end{align*}
 
 To ensure that this recursive relation goes up to order $N$ and not $N+1$, $i$ must be replaced by $i-1$ : 
@@ -224,7 +241,10 @@ To ensure that this recursive relation goes up to order $N$ and not $N+1$, $i$ m
   &\sum_{k=0}^{i-1-j} (k+1)K^{uu}_{(k+j+1)j}\epsilon^1_{i-1-j-k} + 
   \sum_{k=0}^{j} (k+1)K^{uu}_{(i-1-j+k+1)(k+1)}\epsilon^1_{j-k} \\
   &= -\sum_{k=0}^{j} (j-k+1)K^{uu}_{(i-1-j+k)k}\epsilon^1_{j-k+1}
-  -\sum_{k=0}^{j} K^{uv}_{(i-1-j+k)k}c^3_{j-k}
+  -\sum_{k=0}^{j} K^{uv}_{(i-1-j+k)k}c^3_{j-k} \\
+  &\text{\hspace{1em}}
+  + \sum_{k=0}^{i-1-j}K^{uu}_{(k+j)j}c^1_{i-1-j-k}
+  - \sum_{k=0}^{j}K^{uu}_{(i-1-j+k)k}c^1_{j-k}
 \end{align*}}}
 
 One can then deduce what (5)-(7) become by replacing the functions coefficients and signs : 
@@ -235,26 +255,40 @@ One can then deduce what (5)-(7) become by replacing the functions coefficients 
   &\sum_{k=0}^{i-1-j} (k+1)K^{uv}_{(k+j+1)j}\epsilon^1_{i-1-j-k}  
   -\sum_{k=0}^{j} (k+1)K^{uv}_{(i-1-j+k+1)(k+1)}\epsilon^2_{j-k} \\
   &= \sum_{k=0}^{j} (j-k+1)K^{uv}_{(i-1-j+k)k}\epsilon^2_{j-k+1}
-  -\sum_{k=0}^{j} K^{uu}_{(i-1-j+k)k}c^2_{j-k}
+  -\sum_{k=0}^{j} K^{uu}_{(i-1-j+k)k}c^2_{j-k} \\
+  &\text{\hspace{1em}}
+  + \sum_{k=0}^{i-1-j}K^{uv}_{(k+j)j}c^4_{i-1-j-k}
+  - \sum_{k=0}^{j}K^{uv}_{(i-1-j+k)k}c^4_{j-k}
 \end{align*}
+}}
 
+\fbox{\parbox{\textwidth}{
 \begin{align*}
   \forall i \in \N, \forall j \in \left\{0, ..., i-1\right\}, \text{\hspace{1em}}
   &\sum_{k=0}^{i-1-j} (k+1)K^{vu}_{(k+j+1)j}\epsilon^2_{i-1-j-k}  
   -\sum_{k=0}^{j} (k+1)K^{vu}_{(i-1-j+k+1)(k+1)}\epsilon^1_{j-k} \\
   &= \sum_{k=0}^{j} (j-k+1)K^{vu}_{(i-1-j+k)k}\epsilon^1_{j-k+1}
-  +\sum_{k=0}^{j} K^{vv}_{(i-1-j+k)k}c^3_{j-k}
+  +\sum_{k=0}^{j} K^{vv}_{(i-1-j+k)k}c^3_{j-k}\\
+  &\text{\hspace{1em}}
+  - \sum_{k=0}^{i-1-j}K^{vu}_{(k+j)j}c^1_{i-1-j-k}
+  + \sum_{k=0}^{j}K^{vu}_{(i-1-j+k)k}c^1_{j-k}
 \end{align*}
+}}
 
+\fbox{\parbox{\textwidth}{
 \begin{align*}
   \forall i \in \N, \forall j \in \left\{0, ..., i-1\right\}, \text{\hspace{1em}}
   &\sum_{k=0}^{i-1-j} (k+1)K^{vv}_{(k+j+1)j}\epsilon^2_{i-1-j-k}  
   +\sum_{k=0}^{j} (k+1)K^{vv}_{(i-1-j+k+1)(k+1)}\epsilon^2_{j-k} \\
   &= -\sum_{k=0}^{j} (j-k+1)K^{vv}_{(i-1-j+k)k}\epsilon^2_{j-k+1}
-  +\sum_{k=0}^{j} K^{vu}_{(i-1-j+k)k}c^2_{j-k}
+  +\sum_{k=0}^{j} K^{vu}_{(i-1-j+k)k}c^2_{j-k}\\
+  &\text{\hspace{1em}}
+  - \sum_{k=0}^{i-1-j}K^{vv}_{(k+j)j}c^4_{i-1-j-k}
+  + \sum_{k=0}^{j}K^{vv}_{(i-1-j+k)k}c^4_{j-k}
 \end{align*}
-
 }}
+
+
 
 As for the boundary conditions, (9) becomes
 $$\sum_{i=0}^{+\infty}\left(\sum_{k=0}^{i}\left(\sum_{j=0}^{k}K^{uv}_{kj}\right)\left(\epsilon^1_{i-k}+\epsilon^2_{i-k}\right)\right)x^i = \sum_{i=0}^{+\infty}c^2_ix^i$$

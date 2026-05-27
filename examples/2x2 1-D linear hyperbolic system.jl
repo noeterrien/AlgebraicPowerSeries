@@ -49,7 +49,7 @@ md"""
 """
 
 # ╔═╡ fa0e5bce-5ba3-4833-aed5-545e31d166de
-N = 10 # order
+N = 30 # order
 
 # ╔═╡ c26326ea-ad12-4f6c-9dac-40bb68133c7f
 q = 1
@@ -61,8 +61,8 @@ md"""
 
 # ╔═╡ def0ec8e-e807-469d-b10f-425b56720a86
 begin
-	ϵ₁ = TaylorSeries{Float64}(:ϵ₁, [x], [1+x^2], [0])
-	ϵ₂ = TaylorSeries{Float64}(:ϵ₂, [x], [exp(x)], [0])
+	ϵ₁ = TaylorSeries{Float64}(:ϵ₁, [x], [1.2+x^3], [0])
+	ϵ₂ = TaylorSeries{Float64}(:ϵ₂, [x], [1.5+x^2], [0])
 	compute_coefficients!(ϵ₁, N+1)
 	compute_coefficients!(ϵ₂, N+1)
 	@variables ϵ¹₀ ϵ¹ᵢ₋ₖ ϵ¹ᵢ₋₁₋ⱼ₋ₖ  ϵ¹ⱼ₋ₖ ϵ¹ⱼ₋ₖ₊₁
@@ -86,15 +86,24 @@ md"""
 
 # ╔═╡ 9cd56389-61d8-4641-828a-b46180e8e891
 begin
-	c₂ = TaylorSeries{Float64}(:c₂, [x], [sin(x)], [0])
-	c₃ = TaylorSeries{Float64}(:c₃, [x], [cos(x)], [0])
+	c₁ = TaylorSeries{Float64}(:c₁, [x], [3*cos(x)], [0])
+	c₂ = TaylorSeries{Float64}(:c₂, [x], [sin(2x)], [0])
+	c₃ = TaylorSeries{Float64}(:c₃, [x], [1+2*exp(x)], [0])
+	c₄ = TaylorSeries{Float64}(:c4, [x], [1/(3+x^2)], [0])
+	compute_coefficients!(c₁, N)
 	compute_coefficients!(c₂, N)
 	compute_coefficients!(c₃, N)
+	compute_coefficients!(c₄, N)
+	@variables c¹ᵢ₋₁₋ⱼ₋ₖ c¹ⱼ₋ₖ c⁴ᵢ₋₁₋ⱼ₋ₖ c⁴ⱼ₋ₖ
 	@variables c²ᵢ c²ⱼ₋ₖ c³ᵢ c³ⱼ₋ₖ
-	c_c²ᵢ     = SeriesCoefficient(c₂, c²ᵢ  , [i]  , [i]  , (1,))
-	c_c²ⱼ₋ₖ   = SeriesCoefficient(c₂, c²ⱼ₋ₖ, [j-k], [j,k], (1,))
-	c_c³ᵢ     = SeriesCoefficient(c₃, c³ᵢ  , [i]  , [i]  , (1,))
-	c_c³ⱼ₋ₖ   = SeriesCoefficient(c₃, c³ⱼ₋ₖ, [j-k], [j,k], (1,))
+	c_c¹ᵢ₋₁₋ⱼ₋ₖ = SeriesCoefficient(c₁, c¹ᵢ₋₁₋ⱼ₋ₖ, [i-1-j-k], [i,j,k], (1,))
+	c_c¹ⱼ₋ₖ     = SeriesCoefficient(c₁, c¹ⱼ₋ₖ    , [j-k]    , [j,k]  , (1,))
+	c_c²ᵢ     	= SeriesCoefficient(c₂, c²ᵢ  , [i]  , [i]  , (1,))
+	c_c²ⱼ₋ₖ   	= SeriesCoefficient(c₂, c²ⱼ₋ₖ, [j-k], [j,k], (1,))
+	c_c³ᵢ     	= SeriesCoefficient(c₃, c³ᵢ  , [i]  , [i]  , (1,))
+	c_c³ⱼ₋ₖ   	= SeriesCoefficient(c₃, c³ⱼ₋ₖ, [j-k], [j,k], (1,)) 
+	c_c⁴ᵢ₋₁₋ⱼ₋ₖ = SeriesCoefficient(c₄, c⁴ᵢ₋₁₋ⱼ₋ₖ, [i-1-j-k], [i,j,k], (1,))
+	c_c⁴ⱼ₋ₖ     = SeriesCoefficient(c₄, c⁴ⱼ₋ₖ    , [j-k]    , [j,k]  , (1,))
 end; nothing
 
 # ╔═╡ 0527f200-18c8-4098-b3ce-9dfaf7fb92ae
@@ -104,29 +113,37 @@ md"""
 
 # ╔═╡ 7cb2c546-9353-49a4-a14a-413d8c8dbdbe
 begin
-	@variables Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵘᵘᵢ₀
-	@variables Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵘᵛᵢ₀ Kᵘᵛₖⱼ
-	@variables Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵛᵘᵢ₀ Kᵛᵘₖⱼ
-	@variables Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵛᵛᵢ₀
+	@variables Kᵘᵘ₍ₖ₊ⱼ₎ⱼ Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ Kᵘᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵘᵘᵢ₀
+	@variables Kᵘᵛ₍ₖ₊ⱼ₎ⱼ Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵘᵛᵢ₀ Kᵘᵛₖⱼ
+	@variables Kᵛᵘ₍ₖ₊ⱼ₎ⱼ Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵛᵘᵢ₀ Kᵛᵘₖⱼ
+	@variables Kᵛᵛ₍ₖ₊ⱼ₎ⱼ Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ Kᵛᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ Kᵛᵛᵢ₀
 
+	c_Kᵘᵘ₍ₖ₊ⱼ₎ⱼ = SeriesCoefficient(:self, Kᵘᵘ₍ₖ₊ⱼ₎ⱼ, [k+j, j], [j,k], (1,1))
 	c_Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ = SeriesCoefficient(:self, Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ, [k+j+1, j], [j,k], (1,1)) 
+	c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ = SeriesCoefficient(:self, Kᵘᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, [i-1-j-k, k], [i,j,k], (1,1))
 	c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ = SeriesCoefficient(:self, Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, [i-1-j+k, k], [i,j,k], (1,1))
 	c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ = SeriesCoefficient(:self, Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, [i-1-j+k+1, k+1] , [i,j,k], (1,1))
 	c_Kᵘᵘᵢ₀ = SeriesCoefficient(:self, Kᵘᵘᵢ₀, [i, 0], [i], (1,1))
-	
+
+	c_Kᵘᵛ₍ₖ₊ⱼ₎ⱼ = SeriesCoefficient(:self, Kᵘᵛ₍ₖ₊ⱼ₎ⱼ, [k+j, j], [j,k], (2,1))
 	c_Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ = SeriesCoefficient(:self, Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ, [k+j+1, j], [j,k], (1,2))
+	c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ = SeriesCoefficient(:self, Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, [i-1-j-k, k], [i,j,k], (1,2))
 	c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ = SeriesCoefficient(:self, Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, [i-1-j+k, k], [i,j,k], (1,2))
 	c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ = SeriesCoefficient(:self, Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, [i-1-j+k+1, k+1] , [i,j,k], (1,2))
 	c_Kᵘᵛᵢ₀ = SeriesCoefficient(:self, Kᵘᵛᵢ₀, [i, 0], [i], (1,2))
 	c_Kᵘᵛₖⱼ = SeriesCoefficient(:self, Kᵘᵛₖⱼ, [k, j], [k,j], (1,2))
-	
+
+	c_Kᵛᵘ₍ₖ₊ⱼ₎ⱼ = SeriesCoefficient(:self, Kᵛᵘ₍ₖ₊ⱼ₎ⱼ, [k+j, j], [j,k], (1,2))
 	c_Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ = SeriesCoefficient(:self, Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ, [k+j+1, j], [j,k], (2,1))
+	c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ = SeriesCoefficient(:self, Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, [i-1-j-k, k], [i,j,k], (2,1))
 	c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ = SeriesCoefficient(:self, Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, [i-1-j+k, k], [i,j,k], (2,1))
 	c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ = SeriesCoefficient(:self, Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, [i-1-j+k+1, k+1] , [i,j,k], (2,1))
 	c_Kᵛᵘᵢ₀ = SeriesCoefficient(:self, Kᵛᵘᵢ₀, [i, 0], [i], (2,1))
 	c_Kᵛᵘₖⱼ = SeriesCoefficient(:self, Kᵛᵘₖⱼ, [k, j], [k,j], (2,1))
-	
+
+	c_Kᵛᵛ₍ₖ₊ⱼ₎ⱼ = SeriesCoefficient(:self, Kᵛᵛ₍ₖ₊ⱼ₎ⱼ, [k+j, j], [j,k], (2,2))
 	c_Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ = SeriesCoefficient(:self, Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ, [k+j+1, j], [j,k], (2,2))
+	c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ = SeriesCoefficient(:self, Kᵛᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, [i-1-j-k, k], [i,j,k], (2,2))
 	c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ = SeriesCoefficient(:self, Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, [i-1-j+k, k], [i,j,k], (2,2))
 	c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎ = SeriesCoefficient(:self, Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, [i-1-j+k+1, k+1] , [i,j,k], (2,2))
 	c_Kᵛᵛᵢ₀ = SeriesCoefficient(:self, Kᵛᵛᵢ₀, [i, 0], [i], (2,2)) 
@@ -175,38 +192,54 @@ md"""
 
 # ╔═╡ 3f93969e-7570-4c00-aed3-6cb8e96517ef
 begin
-	@variables Σϵ¹xd_xKuu Σϵ¹yd_yKuu Σdϵ¹yKuu Σc³yKuv 
-	@variables Σϵ¹xd_xKuv Σϵ²yd_yKuv Σdϵ²yKuv Σc²yKuu
-	@variables Σϵ²xd_xKvu Σϵ¹yd_yKvu Σdϵ¹yKvu Σc³yKvv
-	@variables Σϵ²xd_xKvv Σϵ²yd_yKvv Σdϵ²yKvv Σc²yKvu   
+	@variables Σϵ¹xd_xKuu Σϵ¹yd_yKuu Σdϵ¹yKuu Σc³yKuv Σc¹xKuu Σc¹yKuu
+	@variables Σϵ¹xd_xKuv Σϵ²yd_yKuv Σdϵ²yKuv Σc²yKuu Σc⁴xKuv Σc⁴yKuv
+	@variables Σϵ²xd_xKvu Σϵ¹yd_yKvu Σdϵ¹yKvu Σc³yKvv Σc¹xKvu Σc¹yKvu
+	@variables Σϵ²xd_xKvv Σϵ²yd_yKvv Σdϵ²yKvv Σc²yKvu Σc⁴xKvv Σc⁴yKvv
 	
 	EF311 = ExpandableFormula(:Σϵ¹xd_xKuu, Σϵ¹xd_xKuu, (k+1)*Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ¹ᵢ₋₁₋ⱼ₋ₖ    , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ¹ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF312 = ExpandableFormula(:Σϵ¹yd_yKuu, Σϵ¹yd_yKuu, (k+1)*Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ¹ⱼ₋ₖ, [i,j], [k], [(0,j)], [], [c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ¹ⱼ₋ₖ], sum)
 	EF313 = ExpandableFormula(:Σdϵ¹yKuu  , Σdϵ¹yKuu  , (j-k+1)*Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ¹ⱼ₋ₖ₊₁  , [i,j], [k], [(0,j)], [], [c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ¹ⱼ₋ₖ₊₁], sum)
 	EF314 = ExpandableFormula(:Σc³yKuv   , Σc³yKuv   , Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c³ⱼ₋ₖ            , [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c³ⱼ₋ₖ], sum)
+	EF315 = ExpandableFormula(:Σc¹xKuu   , Σc¹xKuu   , Kᵘᵘ₍ₖ₊ⱼ₎ⱼ*c¹ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵘ₍ₖ₊ⱼ₎ⱼ, c_c¹ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF316 = ExpandableFormula(:Σc¹yKuu   , Σc¹yKuu   , Kᵘᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c¹ⱼ₋ₖ
+	 , [i,j], [k], [(0,j)], [], [c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c¹ⱼ₋ₖ], sum)
 	
 	EF321 = ExpandableFormula(:Σϵ¹xd_xKuv, Σϵ¹xd_xKuv, (k+1)*Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ¹ᵢ₋₁₋ⱼ₋ₖ, [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵛ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ¹ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF322 = ExpandableFormula(:Σϵ¹yd_yKuv, Σϵ²yd_yKuv, (k+1)*Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ²ⱼ₋ₖ, [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ²ⱼ₋ₖ], sum)
 	EF323 = ExpandableFormula(:Σdϵ²yKuv  , Σdϵ²yKuv  , (j-k+1)*Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ²ⱼ₋ₖ₊₁, [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ²ⱼ₋ₖ₊₁], sum)
 	EF324 = ExpandableFormula(:Σc²yKuu   , Σc²yKuu   , Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c²ⱼ₋ₖ, [i,j], [k], [(0,j)], [], [c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c²ⱼ₋ₖ], sum)
+	EF325 = ExpandableFormula(:Σc⁴xKuv   , Σc⁴xKuv   , Kᵘᵛ₍ₖ₊ⱼ₎ⱼ*c⁴ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵛ₍ₖ₊ⱼ₎ⱼ, c_c⁴ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF326 = ExpandableFormula(:Σc⁴yKuv   , Σc⁴yKuv   , Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c⁴ⱼ₋ₖ
+	 , [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c⁴ⱼ₋ₖ], sum)
 	
 	EF331 = ExpandableFormula(:Σϵ²xd_xKvu, Σϵ²xd_xKvu, (k+1)*Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ²ᵢ₋₁₋ⱼ₋ₖ    , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵘ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ²ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF332 = ExpandableFormula(:Σϵ¹yd_yKvu, Σϵ¹yd_yKvu, (k+1)*Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ¹ⱼ₋ₖ, [i,j], [k], [(0,j)], [],     [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ¹ⱼ₋ₖ], sum)
 	EF333 = ExpandableFormula(:Σdϵ¹yKvu  , Σdϵ¹yKvu  , (j-k+1)*Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ¹ⱼ₋ₖ₊₁  , [i,j], [k], [(0,j)], [],     [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ¹ⱼ₋ₖ₊₁], sum)
 	EF334 = ExpandableFormula(:Σc³yKvv   , Σc³yKvv   , Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c³ⱼ₋ₖ            , [i,j], [k], [(0,j)], [],     [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c³ⱼ₋ₖ], sum)
+	EF335 = ExpandableFormula(:Σc¹xKvu   , Σc¹xKvu   , Kᵛᵘ₍ₖ₊ⱼ₎ⱼ*c¹ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵘ₍ₖ₊ⱼ₎ⱼ, c_c¹ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF336 = ExpandableFormula(:Σc¹yKvu   , Σc¹yKvu   , Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c¹ⱼ₋ₖ
+	 , [i,j], [k], [(0,j)], [], [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c¹ⱼ₋ₖ], sum)
 	
 	EF341 = ExpandableFormula(:Σϵ²xd_xKvv, Σϵ²xd_xKvv, (k+1)*Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ²ᵢ₋₁₋ⱼ₋ₖ    , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ²ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF342 = ExpandableFormula(:Σϵ²yd_yKvv, Σϵ²yd_yKvv, (k+1)*Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ²ⱼ₋ₖ, [i,j], [k], [(0,j)], [],     [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ²ⱼ₋ₖ], sum)
 	EF343 = ExpandableFormula(:Σdϵ²yKvv  , Σdϵ²yKvv  , (j-k+1)*Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ²ⱼ₋ₖ₊₁  , [i,j], [k], [(0,j)], [],     [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ²ⱼ₋ₖ₊₁], sum)
 	EF344 = ExpandableFormula(:Σc²yKvu   , Σc²yKvu   , Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c²ⱼ₋ₖ            , [i,j], [k], [(0,j)], [],     [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c²ⱼ₋ₖ], sum)
+	EF345 = ExpandableFormula(:Σc⁴xKvv   , Σc⁴xKvv   , Kᵛᵛ₍ₖ₊ⱼ₎ⱼ*c⁴ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵛ₍ₖ₊ⱼ₎ⱼ, c_c⁴ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF346 = ExpandableFormula(:Σc⁴yKvv   , Σc⁴yKvv   , Kᵛᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c⁴ⱼ₋ₖ
+	 , [i,j], [k], [(0,j)], [], [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c⁴ⱼ₋ₖ], sum)
 end; nothing
 
 # ╔═╡ 0bc50e88-7188-4ef6-a83c-4dc5e31c6092
 begin
-	R31 = RecurrentRelation(Σϵ¹xd_xKuu+Σϵ¹yd_yKuu ~ -Σdϵ¹yKuu - Σc³yKuv, [i,j], [(0, :∞), (0, i-1)], [], [EF311, EF312, EF313, EF314])
-	R32 = RecurrentRelation(Σϵ¹xd_xKuv-Σϵ²yd_yKuv ~ Σdϵ²yKuv - Σc²yKuu, [i,j], [(0, :∞), (0, i-1)], [], [EF321, EF322, EF323, EF324])
-	R33 = RecurrentRelation(Σϵ²xd_xKvu-Σϵ¹yd_yKvu ~ Σdϵ¹yKvu + Σc³yKvv, [i,j], [(0, :∞), (0, i-1)], [], [EF331, EF332, EF333, EF334])
-	R34 = RecurrentRelation(Σϵ²xd_xKvv+Σϵ²yd_yKvv ~ -Σdϵ²yKvv + Σc²yKvu, [i,j], [(0, :∞), (0, i-1)], [], [EF341, EF342, EF343, EF344])
+	R31 = RecurrentRelation(Σϵ¹xd_xKuu+Σϵ¹yd_yKuu ~ -Σdϵ¹yKuu - Σc³yKuv + Σc¹xKuu - Σc¹yKuu, [i,j], [(0, :∞), (0, i-1)], [], [EF311, EF312, EF313, EF314, EF315, EF316])
+	R32 = RecurrentRelation(Σϵ¹xd_xKuv-Σϵ²yd_yKuv ~ Σdϵ²yKuv - Σc²yKuu + Σc⁴xKuv - Σc⁴yKuv, [i,j], [(0, :∞), (0, i-1)], [], [EF321, EF322, EF323, EF324, EF325, EF326])
+	R33 = RecurrentRelation(Σϵ²xd_xKvu-Σϵ¹yd_yKvu ~ Σdϵ¹yKvu + Σc³yKvv + Σc¹yKvu - Σc¹xKvu, [i,j], [(0, :∞), (0, i-1)], [], [EF331, EF332, EF333, EF334, EF335, EF336])
+	R34 = RecurrentRelation(Σϵ²xd_xKvv+Σϵ²yd_yKvv ~ -Σdϵ²yKvv + Σc²yKvu + Σc⁴yKvv - Σc⁴xKvv, [i,j], [(0, :∞), (0, i-1)], [], [EF341, EF342, EF343, EF344, EF345, EF346])
 end; nothing
 
 # ╔═╡ ebf696cb-3e04-4ead-b5fa-23c0991a8eb1
@@ -217,7 +250,7 @@ md"""
 # ╔═╡ 8009dbf2-4d50-4640-a22b-8c62cd841be3
 begin
 	rs = RecurrentSeries{Float64}(:crs, (2,2), [x,y], [0,0], [R11, R12, R21, R22, R31, R32, R33, R34])
-	compute_coefficients!(rs, N)
+	compute_coefficients!(rs, N; verbose=true)
 end
 
 # ╔═╡ c30e52dd-444e-43a3-bbb3-2b25b63311af
@@ -226,7 +259,7 @@ md"""
 """
 
 # ╔═╡ c191ce94-7a8a-4791-8449-cba849cc74ed
-orders = [2,4,8, 10]
+orders = [15, 20, 25, 30]
 
 # ╔═╡ 4a36eaa3-93b9-4f58-a522-a17ea2566801
 funcs = [ω -> build(rs, o)(1, ω) for o in orders]; nothing
