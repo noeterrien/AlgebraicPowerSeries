@@ -550,161 +550,6 @@ function substitute_known(formula, coeffs::Vector{SeriesCoefficient})
     return substitute(formula, d), unknowns
 end
 
-
-"""
-    function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict)
-
-    Given a dictionary that associates indices of the coefficient c to some other value,
-    substitutes in c indices_expr and indices and returns the new corresponding 
-    SeriesCoefficient
-
-    ###Input
-
-    - `c::SeriesCoefficient` -- The SeriesCoefficient the substitution should be applied to
-    - `subst::Dict` -- The substitution dictionnary
-
-    ###Output
-
-    The new SeriesCoefficient obtained
-"""
-function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict)
-    
-    new_idc_expr = Num[]
-    for idx_expr in c.indices_expr
-        push!(new_idc_expr, substitute(idx_expr, subst))
-    end
-
-    new_idc = Num[]
-    for idx in c.indices
-        push!(new_idc, substitute(idx, subst))
-    end
-
-    SeriesCoefficient(c.ps, c.unique_sym, new_idc_expr, new_idc, c.index)
-
-end
-
-"""
-    substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict)
-
-    Replaces all occurences of the given fixed indices in ef and return the new 
-    corresponding ExpandableFormula
-
-    #Input
-
-    - `ef::ExpandableFormula` -- The ExpandableFormula to which the substitution must be
-      applied
-    - `fixed_indices_values::Dict` -- The index=>value substitution dictionary
-
-    #Output
-
-    An ExpandableFormula with the subtituted indices
-
-"""
-function substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict)
-    # efID::Symbol => same                                                           ✓
-    # sym::Num, => same                                                              ✓
-    # formula::Num, => substituted (indices, coeffs and efe)                         ✓
-    # fixed_indices::Vector, => substituted (indices)                                ✓
-    # varying_indices::Vector{Num},                                                  ✓
-    # varying_indices_ranges::Vector, => substituted (indices)                       ✓
-    # expandable_formulae::Vector{ExpandableFormula}, => substituted (indices, rec)  ✓
-    # series_coeffs::Vector{SeriesCoefficient}, => substituted (indices)             ✓
-    # func => same                                                                   ✓
-
-    new_fixed_indices = substitute_in_vector(ef.fixed_indices, fixed_indices_values)
-    new_varying_indices_ranges = substitute_in_pairs_vector(ef.varying_indices_ranges, fixed_indices_values)
-    new_series_coeffs = [substitute_coeff_indices(c, fixed_indices_values) for c in ef.series_coeffs]
-    new_expandable_formulae = [substitute_fixed_indices_in_ef(_ef, fixed_indices_values) for _ef in ef.expandable_formulae]
-
-    subst_dict = copy(fixed_indices_values)
-    for (new_c, c) in zip(new_series_coeffs, ef.series_coeffs)
-        subst_dict[c.unique_sym] = new_c.unique_sym
-    end
-    for (new_ef, ef) in zip(new_expandable_formulae, ef.expandable_formulae)
-        subst_dict[ef.unique_sym] = new_ef.unique_sym
-    end
-
-    new_formula = substitute(ef.formula, subst_dict)
-
-    ExpandableFormula(ef.efID, ef.sym, new_formula, new_fixed_indices, ef.varying_indices, 
-                      new_varying_indices_ranges, new_expandable_formulae, 
-                      new_series_coeffs, ef.func)
-end
-
-"""
-    expand(ef::ExpandableFormula, indices_values::Dict)
-
-    Expands an ExpandableFormula to a single formula (instance of Num)
-
-    ###Input
-
-    - `ef::ExpandableFormula` -- The formula to expand
-    - `fixed_indices_values::Dict` -- Fixed values that must be attributed to fixed
-      indices before expanding. All other indices values must be deducible from these ones
-
-
-    ###Output
-
-    An instance of Num representing the expanded formula, and a Vector of unknown variables
-    that appear in it
-"""
-function expand(ef::ExpandableFormula, fixed_indices_values::Dict)
-
-    if isempty(ef.varying_indices) # all indices values are stored in fixed_indices_values
-        
-        new_ef = substitute_fixed_indices_in_ef(ef, fixed_indices_values)
-        res_formula, res_unknowns = substitute_known(new_ef.formula, new_ef.series_coeffs)
-        
-        if isempty(new_ef.expandable_formulae)
-            
-            return res_formula, getUniqueSym.(res_unknowns)
-        
-        else
-
-            fully_expanded_formulae, fully_expanded_unknowns = Num[], getUniqueSym.(res_unknowns)
-            for to_expand in new_ef.expandable_formulae
-                to_expand_formula, to_expand_unknowns = expand(to_expand, Dict())
-                expanded_formula = substitute(res_formula, Dict(to_expand.unique_sym=>
-                                                                      to_expand_formula))
-                push!(fully_expanded_formulae, expanded_formula)
-                fully_expanded_unknowns = [fully_expanded_unknowns;to_expand_unknowns]
-            end
-            fully_expanded_formula = ef.func(fully_expanded_formulae)
-
-            return fully_expanded_formula, fully_expanded_unknowns
-
-        end
-
-    else # varying indices must be treated
-
-        # compute the range of the first varying index
-        a = Symbolics.value(substitute(ef.varying_indices_ranges[1][1], fixed_indices_values))
-        b = Symbolics.value(substitute(ef.varying_indices_ranges[1][2], fixed_indices_values))
-
-        # compute all the sub-ExpandableFormulae
-        fully_expanded_formulae, fully_expanded_unknowns = Num[], Num[]
-        for i in a:b 
-            new_fixed_indices = copy(ef.fixed_indices)
-            new_varying_indices = ef.varying_indices[2:end]
-            new_varying_indices_ranges = ef.varying_indices_ranges[2:end]
-            new_fixed_indices_values = copy(fixed_indices_values)
-            new_fixed_indices_values[ef.varying_indices[1]] = i
-
-            to_expand = ExpandableFormula(ef.efID, ef.sym, ef.formula, new_fixed_indices,
-                                          new_varying_indices, new_varying_indices_ranges, 
-                                          ef.expandable_formulae, ef.series_coeffs, ef.func)
-
-            to_expand_formula, to_expand_unknowns = expand(to_expand, new_fixed_indices_values)
-            push!(fully_expanded_formulae, to_expand_formula)
-            fully_expanded_unknowns = [fully_expanded_unknowns; to_expand_unknowns]
-        end
-
-        return ef.func(fully_expanded_formulae), fully_expanded_unknowns
-
-    end
-
-end
-
 """
     RecurrentRelation
 
@@ -750,109 +595,6 @@ struct RecurrentRelation
             expandable_formulae
         )
     end
-end
-
-
-"""
-    function iterate_expand(truncated_rr::RecurrentRelation, fixed_values::Dict=Dict())
-
-    Expands a recurrent relations over its indices
-
-    ###Input
-
-    - `truncated_rr::RecurrentRelation` -- A recurrent relation with **finite** ranges
-    - `fixed_values::Dict` -- A dictionary indicating what are the fixed indices
-      inside the RecurrentRelation and what are their values
-
-
-    ###Output
-
-    - `equations::Vector{Equation}` -- see expand(rr::RecurrentRelation, N::Int)
-    - `unknowns::Vector{Num}` -- see expand(rr::RecurrentRelation, N::Int)
-"""
-function iterate_expand(rr::RecurrentRelation, fixed_values::Dict=Dict(), k::Int=1)
-
-    if isempty(rr.indices_ranges) # each index is determined by the fixed_values dict
-        
-
-        # Substitute indices
-        subst_dict = copy(fixed_values)
-
-        # Substitute coefficients
-        unknowns = SeriesCoefficient[]
-        for c in rr.series_coeffs
-            new_sc = substitute_coeff_indices(c, fixed_values)
-            push!(unknowns, new_sc)
-            subst_dict[c.unique_sym] = new_sc.unique_sym
-        end
-        res_relation = substitute(rr.relation, subst_dict)
-        res_relation, unknowns = substitute_known(res_relation, unknowns)
-        res_unknowns = getUniqueSym.(unknowns)
-
-        # Substitute expandable formulae
-        for ef in rr.expandable_formulae
-            expanded_ef_formula, new_unknowns = expand(ef, fixed_values)
-            res_unknowns = [res_unknowns; new_unknowns]
-            subst_dict[ef.unique_sym] = expanded_ef_formula
-        end
-
-        res_relation = substitute(res_relation, subst_dict)
-
-        res_unknowns
-        return [res_relation], res_unknowns
-
-    else
-
-        all_equations, all_unknowns = Equation[], Num[]
-        rg = rr.indices_ranges[1] # first range should be deducible from fixed_values
-        for i in Symbolics.value(substitute(rg[1], fixed_values)):Symbolics.value(
-                 substitute(rg[2], fixed_values))
-            new_indices_ranges = rr.indices_ranges[2:end]
-            new_fixed_values = copy(fixed_values)
-            new_fixed_values[rr.indices[k]] = i
-
-            new_rr = RecurrentRelation(rr.relation, rr.indices, new_indices_ranges, 
-                                       rr.series_coeffs, rr.expandable_formulae)
-            
-            equations, unknowns = iterate_expand(new_rr, new_fixed_values, k+1)
-            all_equations = [all_equations;equations]
-            all_unknowns = [all_unknowns;unknowns]
-        end
-
-        return all_equations, all_unknowns
-
-    end
-
-end
-
-"""
-    function expand(rr::RecurrentRelation, N::int)
-    
-    Expands the recurrent relation for all possible indices (:∞ is replaced by N)
-
-    ###Input
-    
-    - `rr::RecurrentRelation` -- A relation of recurrence
-    - `N::Int` -- The order up to which the relation should be expanded
-
-    ###Output
-
-    - `equations::Vector{Equation}` -- A vector of equations
-    - `unknowns::Vector{Num}` -- The unknown variables that appear in these equations 
-
-"""
-function expand(rr::RecurrentRelation, N::Int)
-
-    # Truncate
-    truncated_rr = RecurrentRelation(rr.relation,
-                                     rr.indices,
-                                     substitute_in_pairs_vector(rr.indices_ranges, Dict(:∞ => N)),
-                                     rr.series_coeffs,
-                                     rr.expandable_formulae
-    )
-
-    # Expand the truncated relation
-    iterate_expand(truncated_rr)
 end
 
 
@@ -907,10 +649,307 @@ function RecurrentSeries{T}(seriesID::Symbol,
                             variables::Vector{Num},
                             center::Vector,
                             relations::Vector{RecurrentRelation}) where {T,D}
+    coefficients = Array{Vector{T},D}(undef, size)
+    for i in eachindex(coefficients)
+        coefficients[i] = []
+    end
     RecurrentSeries{T,D}(seriesID, size, variables, center, 
-                         Array{Vector{T},D}(undef, size), -1, relations)
+                         coefficients, -1, relations)
 end
 
+"""
+    function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict,
+        N::Union{Int,Nothing}=nothing, ps::Union{RecurrentSeries, Nothing}=nothing)
+
+    Given a dictionary that associates indices of the coefficient c to some other value,
+    substitutes in c indices_expr and indices and returns the new corresponding 
+    SeriesCoefficient
+
+    ###Input
+
+    - `c::SeriesCoefficient` -- The SeriesCoefficient the substitution should be applied to
+    - `subst::Dict` -- The substitution dictionnary
+    - `N::Union{Int,Nothing}=nothing` -- If provided as well as ps, if the first index of
+      the series coefficient is numerical and strictly less than N, then the returned 
+      coefficient should relate to series ps instead of :self
+    - `ps::Union{RecurrentSeries, Nothing}=nothing`
+
+    ###Output
+
+    The new SeriesCoefficient obtained
+"""
+function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict, 
+        N::Union{Int,Nothing}=nothing, ps::Union{RecurrentSeries, Nothing}=nothing)
+    
+    new_idc_expr = Num[]
+    for idx_expr in c.indices_expr
+        push!(new_idc_expr, substitute(idx_expr, subst))
+    end
+
+    new_idc = Num[]
+    for idx in c.indices
+        push!(new_idc, substitute(idx, subst))
+    end
+
+    if (!isnothing(N) && !isnothing(ps) 
+        && (c.ps == :self)
+        && isempty(Symbolics.get_variables(new_idc_expr[1])) 
+        && (new_idc_expr[1] < N)
+       )
+        SeriesCoefficient(ps, c.unique_sym, new_idc_expr, new_idc, c.index)
+    else
+        SeriesCoefficient(c.ps, c.unique_sym, new_idc_expr, new_idc, c.index)
+    end
+
+end
+
+"""
+    substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict,
+                                   N::Int, ps::RecurrentSeries)
+
+    Replaces all occurences of the given fixed indices in ef and return the new 
+    corresponding ExpandableFormula
+
+    #Input
+
+    - `ef::ExpandableFormula` -- The ExpandableFormula to which the substitution must be
+      applied
+    - `fixed_indices_values::Dict` -- The index=>value substitution dictionary
+    - `N::Int` -- The order to which the RecurrentSeries is being expanded
+    - `ps::RecurrentSeries` -- The RecurrentSeries that is being expanded
+
+    #Output
+
+    An ExpandableFormula with the subtituted indices
+
+"""
+function substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict,
+                                        N::Int, ps::RecurrentSeries)
+    # efID::Symbol => same                                                           ✓
+    # sym::Num, => same                                                              ✓
+    # formula::Num, => substituted (indices, coeffs and efe)                         ✓
+    # fixed_indices::Vector, => substituted (indices)                                ✓
+    # varying_indices::Vector{Num},                                                  ✓
+    # varying_indices_ranges::Vector, => substituted (indices)                       ✓
+    # expandable_formulae::Vector{ExpandableFormula}, => substituted (indices, rec)  ✓
+    # series_coeffs::Vector{SeriesCoefficient}, => substituted (indices)             ✓
+    # func => same                                                                   ✓
+
+    new_fixed_indices = substitute_in_vector(ef.fixed_indices, fixed_indices_values)
+    new_varying_indices_ranges = substitute_in_pairs_vector(ef.varying_indices_ranges, fixed_indices_values)
+    new_series_coeffs = [substitute_coeff_indices(c, fixed_indices_values, N, ps) for c in ef.series_coeffs]
+    new_expandable_formulae = [substitute_fixed_indices_in_ef(_ef, fixed_indices_values, N, ps) for _ef in ef.expandable_formulae]
+
+    subst_dict = copy(fixed_indices_values)
+    for (new_c, c) in zip(new_series_coeffs, ef.series_coeffs)
+        subst_dict[c.unique_sym] = new_c.unique_sym
+    end
+    for (new_ef, ef) in zip(new_expandable_formulae, ef.expandable_formulae)
+        subst_dict[ef.unique_sym] = new_ef.unique_sym
+    end
+
+    new_formula = substitute(ef.formula, subst_dict)
+
+    ExpandableFormula(ef.efID, ef.sym, new_formula, new_fixed_indices, ef.varying_indices, 
+                      new_varying_indices_ranges, new_expandable_formulae, 
+                      new_series_coeffs, ef.func)
+end
+
+"""
+    expand(ef::ExpandableFormula, indices_values::Dict, N::Int, ps::RecurrentSeries)
+
+    Expands an ExpandableFormula to a single formula (instance of Num)
+
+    ###Input
+
+    - `ef::ExpandableFormula` -- The formula to expand
+    - `fixed_indices_values::Dict` -- Fixed values that must be attributed to fixed
+      indices before expanding. All other indices values must be deducible from these ones
+    - `N::Int` -- The order to which the RecurrentSeries is being expanded
+    - `ps::RecurrentSeries` -- The RecurrentSeries from which this expandable formula is 
+      issued
+
+    ###Output
+
+    An instance of Num representing the expanded formula, and a Vector of unknown variables
+    that appear in it
+"""
+function expand(ef::ExpandableFormula, fixed_indices_values::Dict, N::Int, ps::RecurrentSeries)
+
+    if isempty(ef.varying_indices) # all indices values are stored in fixed_indices_values
+        
+        new_ef = substitute_fixed_indices_in_ef(ef, fixed_indices_values, N, ps)
+        res_formula, res_unknowns = substitute_known(new_ef.formula, new_ef.series_coeffs)
+        
+        if isempty(new_ef.expandable_formulae)
+            
+            return res_formula, getUniqueSym.(res_unknowns)
+        
+        else
+
+            fully_expanded_formulae, fully_expanded_unknowns = Num[], getUniqueSym.(res_unknowns)
+            for to_expand in new_ef.expandable_formulae
+                to_expand_formula, to_expand_unknowns = expand(to_expand, Dict(), N, ps)
+                expanded_formula = substitute(res_formula, Dict(to_expand.unique_sym=>
+                                                                      to_expand_formula))
+                push!(fully_expanded_formulae, expanded_formula)
+                fully_expanded_unknowns = [fully_expanded_unknowns;to_expand_unknowns]
+            end
+            fully_expanded_formula = ef.func(fully_expanded_formulae)
+
+            return fully_expanded_formula, fully_expanded_unknowns
+
+        end
+
+    else # varying indices must be treated
+
+        # compute the range of the first varying index
+        a = Symbolics.value(substitute(ef.varying_indices_ranges[1][1], fixed_indices_values))
+        b = Symbolics.value(substitute(ef.varying_indices_ranges[1][2], fixed_indices_values))
+
+        # compute all the sub-ExpandableFormulae
+        fully_expanded_formulae, fully_expanded_unknowns = Num[], Num[]
+        for i in a:b 
+            new_fixed_indices = copy(ef.fixed_indices)
+            new_varying_indices = ef.varying_indices[2:end]
+            new_varying_indices_ranges = ef.varying_indices_ranges[2:end]
+            new_fixed_indices_values = copy(fixed_indices_values)
+            new_fixed_indices_values[ef.varying_indices[1]] = i
+
+            to_expand = ExpandableFormula(ef.efID, ef.sym, ef.formula, new_fixed_indices,
+                                          new_varying_indices, new_varying_indices_ranges, 
+                                          ef.expandable_formulae, ef.series_coeffs, ef.func)
+
+            to_expand_formula, to_expand_unknowns = expand(to_expand, new_fixed_indices_values, N, ps)
+            push!(fully_expanded_formulae, to_expand_formula)
+            fully_expanded_unknowns = [fully_expanded_unknowns; to_expand_unknowns]
+        end
+
+        return ef.func(fully_expanded_formulae), fully_expanded_unknowns
+
+    end
+
+end
+
+"""
+    function iterate_expand(truncated_rr::RecurrentRelation, N::Int, ps::RecurrentSeries, 
+                            fixed_values::Dict=Dict(), k::Int=1)
+
+    Expands a recurrent relations over its indices
+
+    ###Input
+
+    - `truncated_rr::RecurrentRelation` -- A recurrent relation with **finite** ranges
+    - `N::Int` -- order at which the relation is currently being expanded. Is used to
+      replace coefficients of lesser order with their values
+    - `ps::RecurrentSeries` -- The RecurrentSeries from which the relation is being 
+      expanded
+    - `fixed_values::Dict=Dict()` -- A dictionary indicating what are the fixed indices
+      inside the RecurrentRelation and what are their values
+    - `k::Int=1` -- Internal variables used for recursion
+
+
+    ###Output
+
+    - `equations::Vector{Equation}` -- see expand(rr::RecurrentRelation, N::Int)
+    - `unknowns::Vector{Num}` -- see expand(rr::RecurrentRelation, N::Int)
+"""
+function iterate_expand(rr::RecurrentRelation, N::Int, 
+                        ps::RecurrentSeries, fixed_values::Dict=Dict(), k::Int=1)
+
+    if isempty(rr.indices_ranges) # each index is determined by the fixed_values dict
+        
+
+        # Substitute indices
+        subst_dict = copy(fixed_values)
+
+        # Substitute coefficients
+        unknowns = SeriesCoefficient[]
+        for c in rr.series_coeffs
+            new_sc = substitute_coeff_indices(c, fixed_values, N, ps)
+            push!(unknowns, new_sc)
+            subst_dict[c.unique_sym] = new_sc.unique_sym
+        end
+        res_relation = substitute(rr.relation, subst_dict)
+        res_relation, unknowns = substitute_known(res_relation, unknowns)
+        res_unknowns = getUniqueSym.(unknowns)
+
+        # Substitute expandable formulae
+        for ef in rr.expandable_formulae
+            expanded_ef_formula, new_unknowns = expand(ef, fixed_values, N, ps)
+            res_unknowns = [res_unknowns; new_unknowns]
+            subst_dict[ef.unique_sym] = expanded_ef_formula
+        end
+
+        res_relation = substitute(res_relation, subst_dict)
+
+        res_unknowns
+        return [res_relation], res_unknowns
+
+    else
+
+        all_equations, all_unknowns = Equation[], Num[]
+        rg = rr.indices_ranges[1] # first range should be deducible from fixed_values
+        for i in Symbolics.value(substitute(rg[1], fixed_values)):Symbolics.value(
+                 substitute(rg[2], fixed_values))
+            new_indices_ranges = rr.indices_ranges[2:end]
+            new_fixed_values = copy(fixed_values)
+            new_fixed_values[rr.indices[k]] = i
+
+            new_rr = RecurrentRelation(rr.relation, rr.indices, new_indices_ranges, 
+                                       rr.series_coeffs, rr.expandable_formulae)
+            
+            equations, unknowns = iterate_expand(new_rr, N, ps, new_fixed_values, k+1)
+            all_equations = [all_equations;equations]
+            all_unknowns = [all_unknowns;unknowns]
+        end
+
+        return all_equations, all_unknowns
+
+    end
+
+end
+
+"""
+    function expand(rr::RecurrentRelation, N::int, ps::RecurrentSeries)
+    
+    Expands the recurrent relation for all possible indices (:∞ is replaced by N)
+
+    ###Input
+    
+    - `rr::RecurrentRelation` -- A relation of recurrence
+    - `N::Int` -- The order up to which the relation should be expanded
+    - `ps::RecurrentSeries` -- The series from which the relation is issued 
+
+    ###Output
+
+    - `equations::Vector{Equation}` -- A vector of equations
+    - `unknowns::Vector{Num}` -- The unknown variables that appear in these equations 
+
+"""
+function expand(rr::RecurrentRelation, N::Int, ps::RecurrentSeries)
+
+    new_indices_ranges = NTuple{2, Union{Int, Num}}[]
+    for index_range in rr.indices_ranges
+        if index_range[2] == :∞
+            push!(new_indices_ranges, (max(N, index_range[1]),N))
+        else
+            push!(new_indices_ranges, index_range)
+        end
+    end
+
+
+    # Truncate
+    truncated_rr = RecurrentRelation(rr.relation,
+                                     rr.indices,
+                                     new_indices_ranges,
+                                     rr.series_coeffs,
+                                     rr.expandable_formulae
+    )
+
+    # Expand the truncated relation
+    iterate_expand(truncated_rr, N, ps)
+end
 
 """
     compute_coefficients!(ps::RecurrentSeries, N::Int)
@@ -921,22 +960,34 @@ end
     
     - `ps::RecurrentSeries` -- a RecurrentSeries
     - `N::Int` -- The order up to which coefficients should be computed
+    - `verbose=false` -- named argument. If set to true, indicates when a new order is 
+      being computed and when it is done in the console
 
     ###Output
 
     Nothing
 """
-function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
+function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=false) where {T,D}
 
+    if ps.order ≥ N 
+        return
+    end
+    
+    if ps.order < N-1
+        compute_coefficients!(ps, N-1; verbose=verbose)
+    end
+    
+    verbose && println("Computing coefficients of order $N")
+    # compute for order N
     # Expand all equations
     equations, unknowns = Equation[], Num[]
     for rr in ps.relations
-        new_equations, new_unknowns = expand(rr, N)
+        new_equations, new_unknowns = expand(rr, N, ps)
         equations = [equations; new_equations]
         unknowns = [unknowns; new_unknowns]
     end
     unknowns = unique(unknowns)
-    
+
     # solve for coefficients
     unsorted_coeffs = symbolic_linear_solve(equations, unknowns)
     unsorted_coeffs = Symbolics.value.(unsorted_coeffs)
@@ -947,13 +998,16 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int) where {T,D}
     max_idx = maximum(t -> t[2], unknowns_idx)
     ## set ps.coefficients to the correct dimensions
     for i in eachindex(ps.coefficients)
-        ps.coefficients[i] = Vector{T}(undef, max_idx)
+            old_length = length(ps.coefficients[i])
+            new_spaces = Vector{T}(undef, max_idx-old_length)
+            ps.coefficients[i] = [ps.coefficients[i];new_spaces]
     end
     ## fill
     for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 
         ps.coefficients[idx[1]...][idx[2]] = val
     end
-    ps.order = N
+    ps.order += 1
 
+    verbose && println("Coefficients computed up to order $N")
     return
 end
