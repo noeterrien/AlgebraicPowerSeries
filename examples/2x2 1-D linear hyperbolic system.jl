@@ -61,8 +61,8 @@ md"""
 
 # ╔═╡ def0ec8e-e807-469d-b10f-425b56720a86
 begin
-	ϵ₁ = TaylorSeries{Float64}(:ϵ₁, [x], [1.2+x^3], [0])
-	ϵ₂ = TaylorSeries{Float64}(:ϵ₂, [x], [1.5+x^2], [0])
+	ϵ₁ = TaylorExpansionSeries{Float64}(:ϵ₁, [x], [1.2+x^3], [0])
+	ϵ₂ = TaylorExpansionSeries{Float64}(:ϵ₂, [x], [1.5+x^2], [0])
 	compute_coefficients!(ϵ₁, N+1)
 	compute_coefficients!(ϵ₂, N+1)
 	@variables ϵ¹₀ ϵ¹ᵢ₋ₖ ϵ¹ᵢ₋₁₋ⱼ₋ₖ  ϵ¹ⱼ₋ₖ ϵ¹ⱼ₋ₖ₊₁
@@ -86,10 +86,10 @@ md"""
 
 # ╔═╡ 9cd56389-61d8-4641-828a-b46180e8e891
 begin
-	c₁ = TaylorSeries{Float64}(:c₁, [x], [3*cos(x)], [0])
-	c₂ = TaylorSeries{Float64}(:c₂, [x], [sin(2x)], [0])
-	c₃ = TaylorSeries{Float64}(:c₃, [x], [1+2*exp(x)], [0])
-	c₄ = TaylorSeries{Float64}(:c4, [x], [1/(3+x^2)], [0])
+	c₁ = TaylorExpansionSeries{Float64}(:c₁, [x], [3*cos(x)], [0])
+	c₂ = TaylorExpansionSeries{Float64}(:c₂, [x], [sin(2x)], [0])
+	c₃ = TaylorExpansionSeries{Float64}(:c₃, [x], [1+2*exp(x)], [0])
+	c₄ = TaylorExpansionSeries{Float64}(:c4, [x], [1/(3+x^2)], [0])
 	compute_coefficients!(c₁, N)
 	compute_coefficients!(c₂, N)
 	compute_coefficients!(c₃, N)

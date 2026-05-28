@@ -53,7 +53,7 @@ N = 25 # order
 
 # ╔═╡ d1504ce0-6b32-488b-9392-ba824b979c8e
 begin
-	∑λᵢ = TaylorSeries{Float64}(:lambda, [x], [6 + x^2*sin(3*x)], [0])
+	∑λᵢ = TaylorExpansionSeries{Float64}(:lambda, [x], [6 + x^2*sin(3*x)], [0])
 	compute_coefficients!(∑λᵢ, N)
 end
 
@@ -183,7 +183,7 @@ for ax in axs
 end
 
 # ╔═╡ 14db96a9-f5d6-41fe-b747-9c730971a6a5
-display(f)
+f
 
 # ╔═╡ 0074b6c6-c236-4d48-bff4-477cf0b8a350
 md"""
@@ -191,13 +191,13 @@ md"""
 """
 
 # ╔═╡ 3faabdbc-5f89-4d4f-9e8c-facd5398793d
-display(surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=2", xlabel="x", ylabel="y", zlabel="K(x,y)")))
+surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=2", xlabel="x", ylabel="y", zlabel="K(x,y)"))
 
 # ╔═╡ bfa7aef2-24fb-429d-b648-2234f8547656
-display(surface(range, range, [funcs[end-1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=8", xlabel="x", ylabel="y", zlabel="K(x,y)")))
+surface(range, range, [funcs[end-1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=8", xlabel="x", ylabel="y", zlabel="K(x,y)"))
 
 # ╔═╡ df3b9147-ee7a-4638-a9d8-8b18fcb565b9
-display(surface(range, range, [funcs[end](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=25", xlabel="x", ylabel="y", zlabel="K(x,y)")))
+surface(range, range, [funcs[end](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=25", xlabel="x", ylabel="y", zlabel="K(x,y)"))
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b

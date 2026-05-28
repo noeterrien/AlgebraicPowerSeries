@@ -6,7 +6,7 @@ include("../AlgebraicPowerSeries.jl")
 @variables i j k l
 
 @variables x y z t 
-multidim_sin_ps = TaylorSeries{Float64}(:multisin, [x,y,z,t], sin.([x;y;;z;t]), [0,0,0,0])
+multidim_sin_ps = TaylorExpansionSeries{Float64}(:multisin, [x,y,z,t], sin.([x;y;;z;t]), [0,0,0,0])
 compute_coefficients!(multidim_sin_ps, 3)
 @test multidim_sin_ps[1,1,1,0,0,0] ≈ 1
 @test multidim_sin_ps[1,1,3,0,0,0] ≈ -1/6

@@ -8,7 +8,7 @@ include("../AlgebraicPowerSeries.jl")
 
 #----------------------------------1-D reaction diffusion equation with space-varying reaction------------------------------------
 
-# ∑λᵢ = TaylorSeries{Float64}(:sin, [x], [sin(x)], [0])
+# ∑λᵢ = TaylorExpansionSeries{Float64}(:sin, [x], [sin(x)], [0])
 # compute_coefficients!(∑λᵢ, 10)
 
 # @variables Kᵢ₀ Kᵢⱼ Kᵢ₍ⱼ₊₂₎ Kₖⱼ
@@ -46,8 +46,8 @@ N=50
 q=1 # c₁ = c₄ = 0
 
 # Σ function and coefficients
-ϵ₁ = TaylorSeries{Float64}(:ϵ₁, [x], [1+x^2], [0])
-ϵ₂ = TaylorSeries{Float64}(:ϵ₂, [x], [exp(x)], [0])
+ϵ₁ = TaylorExpansionSeries{Float64}(:ϵ₁, [x], [1+x^2], [0])
+ϵ₂ = TaylorExpansionSeries{Float64}(:ϵ₂, [x], [exp(x)], [0])
 compute_coefficients!(ϵ₁, N+1); println("coefficients computed for ϵ₁ up to order $(N+1)")
 compute_coefficients!(ϵ₂, N+1); println("coefficients computed for ϵ₂ up to order $(N+1)")
 @variables ϵ¹₀ ϵ¹ᵢ₋ₖ ϵ¹ᵢ₋₁₋ⱼ₋ₖ  ϵ¹ⱼ₋ₖ ϵ¹ⱼ₋ₖ₊₁
@@ -64,8 +64,8 @@ c_ϵ²ⱼ₋ₖ     = SeriesCoefficient(ϵ₂, ϵ²ⱼ₋ₖ    , [j-k]    , [j,
 c_ϵ²ⱼ₋ₖ₊₁   = SeriesCoefficient(ϵ₂, ϵ²ⱼ₋ₖ₊₁  , [j-k+1]  , [j,k]   , (1,))
 
 # C function and coefficients
-c₂ = TaylorSeries{Float64}(:c₂, [x], [sin(x)], [0])
-c₃ = TaylorSeries{Float64}(:c₃, [x], [cos(x)], [0])
+c₂ = TaylorExpansionSeries{Float64}(:c₂, [x], [sin(x)], [0])
+c₃ = TaylorExpansionSeries{Float64}(:c₃, [x], [cos(x)], [0])
 compute_coefficients!(c₂, N); println("coefficients computed for c₂ up to order $N")
 compute_coefficients!(c₃, N); println("coefficients computed for c₃ up to order $N")
 @variables c²ᵢ c²ⱼ₋ₖ c³ᵢ c³ⱼ₋ₖ

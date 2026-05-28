@@ -1,4 +1,5 @@
 using Symbolics
+import TaylorSeries
 include("utilitaries.jl")
 
 #-------------------------------------------------------------PowerSeries--------------------------------------------------------
@@ -249,7 +250,7 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
 
 """
-    TaylorSeries{T,D} <: PowerSeries{T,D}
+    TaylorExpansionSeries{T,D} <: PowerSeries{T,D}
 
     A concrete type representing the Taylor development of a function around a center c
 
@@ -264,18 +265,6 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
     - `func::Array{Num, D}` -- Symbolics representation of a multidimensional function of the
       variables. func size is size
-    - `last_computed_derivatives::Vector{Num}` -- Symbolics representation of the last 
-      derivatives of func that were computed to compute the coefficients
-    - `origin_eval_dict::Dict{Num}` -- A dict to associate each symbol to its value at 
-      the center of the series
-    - `differentials::Vector{Differential}` -- A vector to store the differential operators
-      with respect to the different variables
-    - `factorials::Vector{Int}` -- A vector to store the factorial coefficients to apply
-      to each differential when computing coefficients
-    - `factorials_orders::Vector{Vector{Int}}` -- A vector to store the corresponding orders of
-      each variable in the factorials vector
-    - `dp::Vector{Int}` -- A vector to store the position differentials computation should be
-      started at when computing coefficients
 
     ### Notes
     
@@ -283,12 +272,12 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
     ### Examples
 
-    - `TaylorSeries{T}(seriesID::Symbol,
-                       variables::Vector{Num}, 
-                       func::Array{Num, D},
-                       center::Vector)` -- default constructor
+    - `TaylorExpansionSeries{T}(seriesID::Symbol,
+                                variables::Vector{Num}, 
+                                func::Array{Num, D},
+                                center::Vector)` -- default constructor
 """
-mutable struct TaylorSeries{T,D} <: PowerSeries{T,D}
+mutable struct TaylorExpansionSeries{T,D} <: PowerSeries{T,D}
     
     seriesID::Symbol
     size::NTuple{D,Int}
@@ -297,32 +286,17 @@ mutable struct TaylorSeries{T,D} <: PowerSeries{T,D}
     coefficients::Array{Vector{T},D}
     order::Int
     func::Array{Num, D}
-
-    # used for coefficients computation
-    last_computed_derivatives::Vector{Array{Num,D}}
-    origin_eval_dict::Dict{Num}
-    differentials::Vector{Differential}
-    factorials::Vector{Int}
-    factorials_orders::Vector{Vector{Int}}
-    dp::Vector{Int}
 end
 
-function TaylorSeries{T}(seriesID::Symbol,
+function TaylorExpansionSeries{T}(seriesID::Symbol,
                         variables::Vector{Num}, 
                         func::Array{Num, D}, 
                         center::Vector) where {T,D}
     if length(variables)==length(center)
-        origin_eval_dict = Dict([v=>c for (v,c) in zip(variables, center)])
-        differentials = [Differential(v) for v in variables]
         # create coefficients array
         coeffs = Array{Vector{T}}(undef, size(func))
-        for i in eachindex(coeffs)
-            coeffs[i] = Vector{T}()
-        end
 
-        TaylorSeries(seriesID, size(func), variables, center, coeffs, -1, func, 
-                     Array{Num,D}[], origin_eval_dict, 
-                     differentials, Int[], Vector{Int}[], Int[])
+        TaylorExpansionSeries(seriesID, size(func), variables, center, coeffs, -1, func)
     else
         throw(ArgumentError("center size does not match number of variables"))
     end
@@ -335,67 +309,35 @@ end
 
     ###Input 
     
-    - `ps::TaylorSeries` -- a TaylorSeries
+    - `ps::TaylorExpansionSeries` -- a TaylorSeries
     - `N::Int` -- The order up to which coefficients should be computed
 
     ###Output
 
     Nothing
 """
-function compute_coefficients!(ps::TaylorSeries{T}, N::Int) where T
+function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
     # first check to which order coefficients have already been computed
-    if ps.order >= N
-        return
-    else
-        # compute up to order N
-        if ps.order < N-1
-            compute_coefficients!(ps, N-1)
-        end
+    ps.order >= N && return
 
-        # compute derivatives and factorials
-        last_computed_derivatives = copy(ps.last_computed_derivatives)
-        factorials = copy(ps.factorials)
-        factorials_orders = copy(ps.factorials_orders)
-        dp = copy(ps.dp)
-        if isempty(last_computed_derivatives)
-            ps.last_computed_derivatives = [ps.func]
-            ps.factorials = [1]
-            ps.factorials_orders = [zeros(Int, length(ps.variables))]
-            ps.dp = ones(length(ps.variables))
-        else 
-            ps.last_computed_derivatives = []
-            ps.factorials = []
-            ps.factorials_orders = Vector{Int}[]
-            new_dp = 1
-            for (vidx,diff) in enumerate(ps.differentials)
-                ps.dp[vidx] = new_dp
-                for (d,f,fo) in zip(last_computed_derivatives[dp[vidx]:end], 
-                                    factorials[dp[vidx]:end], 
-                                    factorials_orders[dp[vidx]:end])
-                    push!(ps.last_computed_derivatives, expand_derivatives.(diff.(d)))
-                    push!(ps.factorials, f*(fo[vidx]+1))
-                    new_order = copy(fo)
-                    new_order[vidx] = new_order[vidx] + 1
-                    push!(ps.factorials_orders,new_order)
-                end
-                nbr_computed = length(factorials)-(dp[vidx]-1)
-                new_dp += nbr_computed
+    # Compute up to order N
+    js = TaylorSeries.JetSpace(order=N, variables=Symbol.(ps.variables))
+    js_var = TaylorSeries.variables(js)
+
+    for i in eachindex(ps.coefficients)
+        expr = ps.func[i]
+        f = build_function(expr, ps.variables...; expression=Val{false})
+        vectorized_f(v) = f.(v...)
+        dvpt = vectorized_f(js_var)
+        ps.coefficients[i] = []
+        for same_order_coeffs in dvpt.coeffs
+            for coeff in same_order_coeffs
+                push!(ps.coefficients[i], coeff)
             end
         end
-        
-        # compute coefficients of order N
-        for (func,f) in zip(ps.last_computed_derivatives, ps.factorials)
-            coeff = substitute(func, ps.origin_eval_dict, fold=Val(true))./f
-            for i in eachindex(ps.coefficients)
-                val = Symbolics.value(coeff[i])
-                push!(ps.coefficients[i], (val |> T))
-            end
-        end
-
-        ps.order=N
-
-        return
     end
+    
+    ps.order=N
 end
 
 
