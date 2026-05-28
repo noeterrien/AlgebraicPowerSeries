@@ -133,7 +133,7 @@ end
 
 
 """
-    compute_monomials(N::Int, variables::Vector{Num})::Vector{Num}
+    compute_monomials(N::Int, variables::Vector{Num}, center::Vector)::Vector{Num}
 
     Computes the monomials of variables up to order N
 
@@ -142,21 +142,23 @@ end
     - `N::Int` -- The order up to which the monomials should be computed
     - `variables::Vector{Num}` -- The variables these monomials migth depend on
       (assume they commute !)
+    - `center::Vector` -- The center around which to compute the monomials. Muste be the
+      same length as variables
       
     ###Output
 
     A Vector{Num} of the monomials in increasing order. For instance, for 3 variables
     x, y, z, it would be [Num(1), x, y, z, x², xy, xz, y², yz, z², ...]
 """
-function compute_monomials(N::Int, variables::Vector{Num})::Vector{Num}
+function compute_monomials(N::Int, variables::Vector{Num}, center::Vector)::Vector{Num}
     monomials = Num[Num(1)]
     mult_start_at = ones(Int, length(variables))
 
     for _ in 1:N
         l_monom = length(monomials)
-        for (i,v) in enumerate(variables)
+        for ((i,v),c) in zip(enumerate(variables), center)
             for j in mult_start_at[i]:l_monom
-                push!(monomials, v*monomials[j])
+                push!(monomials, (v-c)*monomials[j])
             end
             mult_start_at[i] += length(monomials)-l_monom
         end

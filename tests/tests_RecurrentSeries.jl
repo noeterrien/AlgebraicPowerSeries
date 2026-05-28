@@ -42,7 +42,7 @@ include("../AlgebraicPowerSeries.jl")
 
 #-----------------------------------------------2x2 1-D linear hyperbolic system--------------------------------------------------
 # parameters
-N=50
+N=10
 q=1 # c₁ = c₄ = 0
 
 # Σ function and coefficients

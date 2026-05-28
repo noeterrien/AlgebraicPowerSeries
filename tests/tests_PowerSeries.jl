@@ -15,3 +15,10 @@ compute_coefficients!(multidim_sin_ps, 3)
 
 sc_K¹¹₍ᵢ₊₂₎ⱼₖₗ = SeriesCoefficient(multidim_sin_ps, K¹¹₍ᵢ₊₂₎ⱼₖₗ, [i+2,j,k,l], [i,j,k,l], (1,1))
 @test getValue(sc_K¹¹₍ᵢ₊₂₎ⱼₖₗ, [1,0,0,0]) ≈ -1/6
+
+for (c, v) in zip([0, π/2, π, -π/2], [0, 1-π^2/8+π^4/384, π-π^3/6+π^5/120, -1+π^2/8-π^4/384])
+    sin_ps = TaylorExpansionSeries{Float64}(:sin, [x], [sin(x)], [c])
+    compute_coefficients!(sin_ps, 5)
+    built = build(sin_ps, 5)
+    @test built(0)[1] ≈ v
+end

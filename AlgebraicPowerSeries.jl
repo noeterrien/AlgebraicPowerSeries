@@ -66,7 +66,6 @@ function Base.getindex(ps::PowerSeries{T,Dps}, I::Vararg{Int64,Didx}) where {T,D
     end
 end
 
-#TODO : WARNING currently only works if center is 0
 """
     build_matrix_elt(ps::PowerSeries, N::Int)
 
@@ -98,8 +97,7 @@ function build_matrix_elt(ps::PowerSeries, N::Int)
         zeros(eltype(args), ps.size)
     end
     
-    monomials = compute_monomials(N, ps.variables)
-    monomials
+    monomials = compute_monomials(N, ps.variables, ps.center)
     to_build = zeros(Num, ps.size)
     for i in eachindex(ps.coefficients)
         to_build[i] = sum(ps[i][1:length(monomials)] .* monomials)
@@ -315,7 +313,7 @@ end
     ###Output
 
     Nothing
-""" # TODO WARNING, only works if center is zero
+"""
 function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
     # first check to which order coefficients have already been computed
     ps.order >= N && return
