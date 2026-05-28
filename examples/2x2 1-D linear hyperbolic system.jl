@@ -193,8 +193,8 @@ md"""
 # ╔═╡ 3f93969e-7570-4c00-aed3-6cb8e96517ef
 begin
 	@variables Σϵ¹xd_xKuu Σϵ¹yd_yKuu Σdϵ¹yKuu Σc³yKuv Σc¹xKuu Σc¹yKuu
-	@variables Σϵ¹xd_xKuv Σϵ²yd_yKuv Σdϵ²yKuv Σc²yKuu Σc⁴xKuv Σc⁴yKuv
-	@variables Σϵ²xd_xKvu Σϵ¹yd_yKvu Σdϵ¹yKvu Σc³yKvv Σc¹xKvu Σc¹yKvu
+	@variables Σϵ¹xd_xKuv Σϵ²yd_yKuv Σdϵ²yKuv Σc²yKuu Σc¹xKuv Σc⁴yKuv
+	@variables Σϵ²xd_xKvu Σϵ¹yd_yKvu Σdϵ¹yKvu Σc³yKvv Σc⁴xKvu Σc¹yKvu
 	@variables Σϵ²xd_xKvv Σϵ²yd_yKvv Σdϵ²yKvv Σc²yKvu Σc⁴xKvv Σc⁴yKvv
 	
 	EF311 = ExpandableFormula(:Σϵ¹xd_xKuu, Σϵ¹xd_xKuu, (k+1)*Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ¹ᵢ₋₁₋ⱼ₋ₖ    , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵘ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ¹ᵢ₋₁₋ⱼ₋ₖ], sum)
@@ -210,8 +210,8 @@ begin
 	EF322 = ExpandableFormula(:Σϵ¹yd_yKuv, Σϵ²yd_yKuv, (k+1)*Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ²ⱼ₋ₖ, [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ²ⱼ₋ₖ], sum)
 	EF323 = ExpandableFormula(:Σdϵ²yKuv  , Σdϵ²yKuv  , (j-k+1)*Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ²ⱼ₋ₖ₊₁, [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ²ⱼ₋ₖ₊₁], sum)
 	EF324 = ExpandableFormula(:Σc²yKuu   , Σc²yKuu   , Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c²ⱼ₋ₖ, [i,j], [k], [(0,j)], [], [c_Kᵘᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c²ⱼ₋ₖ], sum)
-	EF325 = ExpandableFormula(:Σc⁴xKuv   , Σc⁴xKuv   , Kᵘᵛ₍ₖ₊ⱼ₎ⱼ*c⁴ᵢ₋₁₋ⱼ₋ₖ
-	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵛ₍ₖ₊ⱼ₎ⱼ, c_c⁴ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF325 = ExpandableFormula(:Σc¹xKuv   , Σc¹xKuv   , Kᵘᵛ₍ₖ₊ⱼ₎ⱼ*c¹ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵘᵛ₍ₖ₊ⱼ₎ⱼ, c_c¹ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF326 = ExpandableFormula(:Σc⁴yKuv   , Σc⁴yKuv   , Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c⁴ⱼ₋ₖ
 	 , [i,j], [k], [(0,j)], [], [c_Kᵘᵛ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c⁴ⱼ₋ₖ], sum)
 	
@@ -219,8 +219,8 @@ begin
 	EF332 = ExpandableFormula(:Σϵ¹yd_yKvu, Σϵ¹yd_yKvu, (k+1)*Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎*ϵ¹ⱼ₋ₖ, [i,j], [k], [(0,j)], [],     [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₊₁₎₍ₖ₊₁₎, c_ϵ¹ⱼ₋ₖ], sum)
 	EF333 = ExpandableFormula(:Σdϵ¹yKvu  , Σdϵ¹yKvu  , (j-k+1)*Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*ϵ¹ⱼ₋ₖ₊₁  , [i,j], [k], [(0,j)], [],     [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_ϵ¹ⱼ₋ₖ₊₁], sum)
 	EF334 = ExpandableFormula(:Σc³yKvv   , Σc³yKvv   , Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c³ⱼ₋ₖ            , [i,j], [k], [(0,j)], [],     [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c³ⱼ₋ₖ], sum)
-	EF335 = ExpandableFormula(:Σc¹xKvu   , Σc¹xKvu   , Kᵛᵘ₍ₖ₊ⱼ₎ⱼ*c¹ᵢ₋₁₋ⱼ₋ₖ
-	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵘ₍ₖ₊ⱼ₎ⱼ, c_c¹ᵢ₋₁₋ⱼ₋ₖ], sum)
+	EF335 = ExpandableFormula(:Σc⁴xKvu   , Σc⁴xKvu   , Kᵛᵘ₍ₖ₊ⱼ₎ⱼ*c⁴ᵢ₋₁₋ⱼ₋ₖ
+	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵘ₍ₖ₊ⱼ₎ⱼ, c_c⁴ᵢ₋₁₋ⱼ₋ₖ], sum)
 	EF336 = ExpandableFormula(:Σc¹yKvu   , Σc¹yKvu   , Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c¹ⱼ₋ₖ
 	 , [i,j], [k], [(0,j)], [], [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c¹ⱼ₋ₖ], sum)
 	
@@ -237,8 +237,8 @@ end; nothing
 # ╔═╡ 0bc50e88-7188-4ef6-a83c-4dc5e31c6092
 begin
 	R31 = RecurrentRelation(Σϵ¹xd_xKuu+Σϵ¹yd_yKuu ~ -Σdϵ¹yKuu - Σc³yKuv + Σc¹xKuu - Σc¹yKuu, [i,j], [(0, :∞), (0, i-1)], [], [EF311, EF312, EF313, EF314, EF315, EF316])
-	R32 = RecurrentRelation(Σϵ¹xd_xKuv-Σϵ²yd_yKuv ~ Σdϵ²yKuv - Σc²yKuu + Σc⁴xKuv - Σc⁴yKuv, [i,j], [(0, :∞), (0, i-1)], [], [EF321, EF322, EF323, EF324, EF325, EF326])
-	R33 = RecurrentRelation(Σϵ²xd_xKvu-Σϵ¹yd_yKvu ~ Σdϵ¹yKvu + Σc³yKvv + Σc¹yKvu - Σc¹xKvu, [i,j], [(0, :∞), (0, i-1)], [], [EF331, EF332, EF333, EF334, EF335, EF336])
+	R32 = RecurrentRelation(Σϵ¹xd_xKuv-Σϵ²yd_yKuv ~ Σdϵ²yKuv - Σc²yKuu + Σc¹xKuv - Σc⁴yKuv, [i,j], [(0, :∞), (0, i-1)], [], [EF321, EF322, EF323, EF324, EF325, EF326])
+	R33 = RecurrentRelation(Σϵ²xd_xKvu-Σϵ¹yd_yKvu ~ Σdϵ¹yKvu + Σc³yKvv + Σc¹yKvu - Σc⁴xKvu, [i,j], [(0, :∞), (0, i-1)], [], [EF331, EF332, EF333, EF334, EF335, EF336])
 	R34 = RecurrentRelation(Σϵ²xd_xKvv+Σϵ²yd_yKvv ~ -Σdϵ²yKvv + Σc²yKvu + Σc⁴yKvv - Σc⁴xKvv, [i,j], [(0, :∞), (0, i-1)], [], [EF341, EF342, EF343, EF344, EF345, EF346])
 end; nothing
 
@@ -296,7 +296,7 @@ end
 foreach(ax -> axislegend(ax; position=:rt), axs)
 
 # ╔═╡ 12b0551e-c67a-485b-80e0-6d00e91bf853
-fig
+display(fig)
 
 # ╔═╡ Cell order:
 # ╟─b34ceca0-58f9-11f1-9c39-fd7d92bf34d9
