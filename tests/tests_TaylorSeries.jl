@@ -45,6 +45,10 @@ push!(multidim_sin_cos_res, [0, 1, 1,  0,  0,  0, -1/6, -1/2, -1/2, -1/6, 0, 0, 
 push!(multidim_sin_cos_res, [1, 0, 0, -1/2, -1, -1/2,  0,  0,  0,  0, 1/24, 1/6, 1/4, 1/6, 1/24, 0, 0, 0, 0, 0, 0])
 @test multidim_sin_cos_ps.coefficients ≈ multidim_sin_cos_res
 
+sin_halfπ = TaylorExpansionSeries{Float64}(:sin_halfπ, [x], [sin(x)], [π/2])
+compute_coefficients!(sin_halfπ, 5)
+@test sin_halfπ.coefficients[1] ≈ [1, 0, -1/2, 0, 1/24, 0]
+
 print("Time needed to compute coefficients of a 2x2 sin*cos matrix of 4 variables up to order 20 : ")
 @btime begin
 multidim_sintimescos_ps = TaylorExpansionSeries{Float64}(:multidim_sintimescos, [x,y,z,t], sin.([x;y;;z;t]).*cos(t), [0,0,0,0])

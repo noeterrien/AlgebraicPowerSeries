@@ -315,7 +315,7 @@ end
     ###Output
 
     Nothing
-"""
+""" # TODO WARNING, only works if center is zero
 function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
     # first check to which order coefficients have already been computed
     ps.order >= N && return
@@ -327,7 +327,7 @@ function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
     for i in eachindex(ps.coefficients)
         expr = ps.func[i]
         f = build_function(expr, ps.variables...; expression=Val{false})
-        vectorized_f(v) = f.(v...)
+        vectorized_f(v) = f.((v+ps.center)...)
         dvpt = vectorized_f(js_var)
         ps.coefficients[i] = []
         for same_order_coeffs in dvpt.coeffs
