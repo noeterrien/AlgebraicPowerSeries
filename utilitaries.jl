@@ -166,3 +166,24 @@ function compute_monomials(N::Int, variables::Vector{Num}, center::Vector)::Vect
     
     monomials
 end
+
+"""
+    getAllVariables(exprs::Vector{Num})::Vector{Num}
+
+    Returns a Vector{Num} of all the variables that appear in a vector of expressions
+
+    ###Input
+
+    - `exprs::Vector{Num}` -- A Vector of Symbolics expressions
+
+    ###Output
+
+    The Vector of all the variables that appear in exprs
+"""
+function getAllVariables(exprs::Vector{Num})::Vector{Num}
+    res = Set{Num}()
+    for expr in exprs
+        res = union(res, Symbolics.get_variables(expr))
+    end
+    Vector([res...])
+end

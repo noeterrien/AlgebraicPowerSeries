@@ -136,7 +136,7 @@ where $\gamma = \left[\alpha, \beta\right]^T$ and $C_0(x) = \begin{pmatrix} c_1(
 Using Volterra integral transformation, $\gamma = w - \int_{0}^{x}K(x,y)w(y,t) dy$, one obtains the following sufficient conditions : 
 
 \begin{align*}
-  \Sigma(x)K_x(x,y) + K_y(x,y)\Sigma(y) &= K(x,y)\left[C(y)-\Sigma'(y)\right]-K(x,y)C_0(x) \\
+  \Sigma(x)K_x(x,y) + K_y(x,y)\Sigma(y) &= K(x,y)\left[C(y)-\Sigma'(y)\right]-C_0(x)K(x,y) \\
   K(x,x)\Sigma(x) - \Sigma(x)K(x,x) &= C(x) - C_0(x) \\
   K(x,0)\Sigma(0)\begin{pmatrix}
     q \\ 1

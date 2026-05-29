@@ -221,7 +221,7 @@ begin
 	EF334 = ExpandableFormula(:Σc³yKvv   , Σc³yKvv   , Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ*c³ⱼ₋ₖ            , [i,j], [k], [(0,j)], [],     [c_Kᵛᵛ₍ᵢ₋₁₋ⱼ₊ₖ₎ₖ, c_c³ⱼ₋ₖ], sum)
 	EF335 = ExpandableFormula(:Σc⁴xKvu   , Σc⁴xKvu   , Kᵛᵘ₍ₖ₊ⱼ₎ⱼ*c⁴ᵢ₋₁₋ⱼ₋ₖ
 	 , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵘ₍ₖ₊ⱼ₎ⱼ, c_c⁴ᵢ₋₁₋ⱼ₋ₖ], sum)
-	EF336 = ExpandableFormula(:Σc¹yKvu   , Σc¹yKvu   , Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c¹ⱼ₋ₖ
+	EF336 = ExpandableFormula(:Σc¹yKvu  , Σc¹yKvu   , Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ*c¹ⱼ₋ₖ
 	 , [i,j], [k], [(0,j)], [], [c_Kᵛᵘ₍ᵢ₋₁₋ⱼ₋ₖ₎ₖ, c_c¹ⱼ₋ₖ], sum)
 	
 	EF341 = ExpandableFormula(:Σϵ²xd_xKvv, Σϵ²xd_xKvv, (k+1)*Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ*ϵ²ᵢ₋₁₋ⱼ₋ₖ    , [i,j], [k], [(0,i-1-j)], [], [c_Kᵛᵛ₍ₖ₊ⱼ₊₁₎ⱼ, c_ϵ²ᵢ₋₁₋ⱼ₋ₖ], sum)

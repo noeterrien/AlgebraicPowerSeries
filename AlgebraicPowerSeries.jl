@@ -4,6 +4,7 @@ include("utilitaries.jl")
 
 #-------------------------------------------------------------PowerSeries--------------------------------------------------------
 abstract type AbstractPowerSeries{D} end
+abstract type AbstractScalarSeriesSymbol end
 
 """
     PowerSeries{T,D}
@@ -26,45 +27,14 @@ abstract type AbstractPowerSeries{D} end
       a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ... thus the coefficients vectors are 
       [a₀₀₀, a₁₀₀, a₁₁₀, a₁₁₁, a₂₀₀, a₂₁₀, a₂₁₁, a₂₂₀, a₂₂₁, a₂₂₂, ...]
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
+    - `scalar_series_ref::Array{AbstractScalarSeriesSymbol, D}` -- An array of 
+      AbstractScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
 
     - `compute_coefficients!(ps::PowerSeries, N::Int)` -- computes the coefficients up to 
       order N
 """
 abstract type PowerSeries{T,D} <: AbstractPowerSeries{D} end  
 
-"""
-    Base.getindex(ps::PowerSeries{Dps}, I::Vararg{Int64,Didx}) where {Dps,Didx}
-
-    Access the series coefficients
-
-    ###Input
-
-    - `ps::PowerSeries{Dps}` -- a PowerSeries
-    - `I::Vararg{Int64,Didx}` -- the indices of the coefficient. Didx <= Dps+1. The first
-      Dps indices allow the selection of serie(s) in the array of coupled series while the
-      Dps+1 index allows selects the order of the coefficient (starting at 0)
-
-    ###Output
-
-    Depending on the number of indices, either an Array{Vector{T},Dps-Didx} if Didx < Dps,
-    a Vector{T} if Didx == Dps or a T if Didx > Dps.
-    Will throw an ArgumentError if trying to access a coefficient that has not been
-    computed yet
-"""
-function Base.getindex(ps::PowerSeries{T,Dps}, I::Vararg{Int64,Didx}) where {T,Dps,Didx}
-    if Didx <= Dps
-        return ps.coefficients[I...]
-    else 
-        coeffs = ps.coefficients[I[1:Dps]...]
-        idx = convertIndices(I[Dps+1:Didx]...)
-        if idx <= length(coeffs)
-            return coeffs[idx]
-        else
-            throw(ArgumentError("Trying to access a series coefficient that has not been 
-                                 computed yet"))
-        end
-    end
-end
 
 """
     build_matrix_elt(ps::PowerSeries, N::Int)
@@ -100,7 +70,7 @@ function build_matrix_elt(ps::PowerSeries, N::Int)
     monomials = compute_monomials(N, ps.variables, ps.center)
     to_build = zeros(Num, ps.size)
     for i in eachindex(ps.coefficients)
-        to_build[i] = sum(ps[i][1:length(monomials)] .* monomials)
+        to_build[i] = sum(ps.coefficients[i][1:length(monomials)] .* monomials)
     end
 
     map(expr -> build_function(expr, ps.variables...; expression=Val{false}), to_build)
@@ -195,6 +165,45 @@ function SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol},
     SeriesCoefficient(ps, sym, u_sym, indices_expr, indices, index)
 end
 
+_exponent_parsing_dict = Dict('⁰' => '0', '¹' => '1', '²' => '2', '³' => '3', '⁴' => '4', 
+                              '⁵' => '5', '⁶' => '6', '⁷' => '7', '⁸' => '8', '⁹' => '9')
+
+"""
+    parse_coeff_name(name::String)::Vector{String}
+
+    Gets a SeriesCoefficient indices expressions that appear in a specifically formatted 
+    expression
+
+    ###Input
+
+    - `name::String` -- The formatted expression of a series coefficient :
+
+      * The character '_' indicates a new index in the coefficient scalar series indices
+      * This character must then be followed by a sequence of characters s that can be
+        parsed to a Num using Symbolics.unwrap(eval(Meta.parse(string(s))))
+
+      For instance, K²³_(i+j)_j will output ["(i+j)","j"]
+
+    ###Output
+    
+    A Vector{String} containing the coefficient indices expressions
+"""
+function parse_coeff_name(name::String)::Tuple{Vector{String}, Vector{String}}
+    idcs = []
+    
+    found_first_index = false
+    for c in name
+        if c == '_'
+            push!(idcs, "")
+            found_first_index = true
+        elseif found_first_index
+            idcs[end] *= c
+        end
+    end
+
+    idcs
+end
+
 """
     getValue(sc::SeriesCoefficient, at::Vector{Int})
 
@@ -223,7 +232,7 @@ function getValue(sc::SeriesCoefficient, at::Vector{Int})
         end
         
         # then return the result
-        return sc.ps[sc.index..., idx...]
+        return sc.ps.coefficients[sc.index...][convertIndices(idx...)]
     else
         throw(ArgumentError("Cannot return value of a coefficient which refers to series
                              :self"))
@@ -244,6 +253,89 @@ end
 """
 getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
+#-----------------------------------------------------------SeriesSymbol-------------------------------------------------------------
+
+"""
+    ScalarSeriesSymbol <: AbstractScalarSeriesSymbol
+
+    A convenient way to define SeriesCoefficients
+
+    ###Fields
+
+    - `ps::Union{PowerSeries, Symbol, Nothing}` -- The PowerSeries it refers to or :self
+    - `scalar_idx::Tuple` -- The index of the ScalarSeries in the PowerSeries matrix
+    - `coefficients::Dict{Tuple, SeriesCoefficient}` -- The SeriesCoefficients stored
+
+    ###Examples
+    - `ScalarSeriesSymbol(ps::Union{PowerSeries, Symbol}, scalar_idx::Tuple, 
+                          coefficients::vector{SeriesCoefficient})` -- default constructor
+    - `ps[1,2]` -- (where ps is a PowerSeries) get a ScalarSeriesSymbol using the getindex
+      method
+"""
+mutable struct ScalarSeriesSymbol <: AbstractScalarSeriesSymbol
+    ps::Union{PowerSeries, Symbol, Nothing}
+    scalar_idx::Tuple
+    coefficients::Dict{Vector, SeriesCoefficient}
+end
+
+"""
+    Base.getindex(ps::PowerSeries{D}, I::Vararg{Int64, D}) where D
+
+    Returns the ScalarSeriesSymbol at index I
+
+    ###Input
+
+    - `ps::PowerSeries{D}` -- a PowerSeries
+    - `I::Vararg{Int, D}` -- The index at which one wants to retrieve the 
+      ScalarSeriesSymbol
+
+    ###Output
+
+    - The ScalarSeriesSymbol of ps at index I
+"""
+Base.getindex(ps::AbstractPowerSeries{D}, I::Vararg{Int64, D}) where D = ps.scalar_series_ref[I...]
+
+"""
+    Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
+
+    Create (if necessary) and returns a SeriesCoefficient at index I. The coefficient is
+    then saved in the ScalarSeriesSymbol to be accessible at any time
+"""
+function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
+    vI = Vector([I...])
+    if vI ∈ keys(sss.coefficients)
+        return sss.coefficients[vI]
+    else
+        if sss.ps == :self
+            sym = Symbol(string(:self) * string(sss.scalar_idx) * string(Num.(vI)))
+            sym, = @variables $sym
+            sss.coefficients[vI] = SeriesCoefficient(:self, sym, vI, getAllVariables(vI), sss.scalar_idx)
+        elseif sss.ps isa PowerSeries
+            sym = Symbol(string(sss.ps.seriesID) * string(sss.scalar_idx) * string(Num.(vI)))
+            sym, = @variables $sym
+            sss.coefficients[vI] = SeriesCoefficient(sss.ps, sym, vI, getAllVariables(vI), sss.scalar_idx)
+        else
+            throw(ArgumentError("Cannot construct a SeriesCoefficient for a 
+                                 ScalarSeriesSymbol which doesn't refer to any known 
+                                 PowerSeries or :self"))
+        end
+        return sss.coefficients[vI]
+    end
+end
+
+"""
+    selfseries_symbols(K, size...)
+
+    Generates the ScalarSeriesSymbol with reference to the series :self of size size.
+    One can then easily generate SeriesCoefficients using K[scalar_series_idx][coefficient_indices]
+"""
+macro selfseries_symbols(K, size...)
+    quote 
+        ci = reshape(collect(CartesianIndices($size)), $size)
+        $(esc(K)) = map(idx -> ScalarSeriesSymbol(:self, Tuple(idx), Dict()), ci)
+    end
+end
+
 #-----------------------------------------------------------TaylorSeries-------------------------------------------------------------
 
 
@@ -263,6 +355,8 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
     - `func::Array{Num, D}` -- Symbolics representation of a multidimensional function of the
       variables. func size is size
+    - `scalar_series_ref::Array{ScalarSeriesSymbol, D}` -- An array of 
+      ScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
 
     ### Notes
     
@@ -283,7 +377,32 @@ mutable struct TaylorExpansionSeries{T,D} <: PowerSeries{T,D}
     center::Vector
     coefficients::Array{Vector{T},D}
     order::Int
+    scalar_series_ref::Array{ScalarSeriesSymbol, D}
     func::Array{Num, D}
+
+    function TaylorExpansionSeries{T,D}(
+        seriesID::Symbol,
+        size::NTuple{D,Int},
+        variables::Vector{Num},
+        center::Vector,
+        coefficients::Array{Vector{T},D},
+        order::Int,
+        scalar_series_ref::Array{ScalarSeriesSymbol, D},
+        func::Array{Num, D}) where {T,D}
+
+        ts = new(seriesID,
+                 size,
+                 variables,
+                 center,
+                 coefficients,
+                 order,
+                 scalar_series_ref,
+                 func)
+        for sss in scalar_series_ref
+            sss.ps = ts
+        end
+        return ts
+    end
 end
 
 function TaylorExpansionSeries{T}(seriesID::Symbol,
@@ -291,10 +410,13 @@ function TaylorExpansionSeries{T}(seriesID::Symbol,
                         func::Array{Num, D}, 
                         center::Vector) where {T,D}
     if length(variables)==length(center)
+        size = Base.size(func)
         # create coefficients array
-        coeffs = Array{Vector{T}}(undef, size(func))
+        coeffs = Array{Vector{T}}(undef, size)
+        scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, Tuple(idx), Dict()), keys(coeffs))
 
-        TaylorExpansionSeries(seriesID, size(func), variables, center, coeffs, -1, func)
+        TaylorExpansionSeries{T,D}(seriesID, size, variables, center, coeffs, -1, 
+                              scalar_series_ref, func)
     else
         throw(ArgumentError("center size does not match number of variables"))
     end
@@ -556,6 +678,8 @@ end
     - `center::Vector` -- The series center, i.e c in Σaᵢ(x-c)ⁱ
     - `coefficients::Array{Vector{T},D}` -- The series coefficients
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
+    - `scalar_series_ref::Array{AbstractScalarSeriesSymbol, D}` -- An array of 
+      AbstractScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
 
     relations::Vector{RecurrentRelation} -- A number of relations that allows to compute
       the coefficients numerically
@@ -579,9 +703,33 @@ mutable struct RecurrentSeries{T,D} <: PowerSeries{T,D}
     center::Vector
     coefficients::Array{Vector{T},D}
     order::Int
+    scalar_series_ref::Array{ScalarSeriesSymbol, D}
+    
+
 
     relations::Vector{RecurrentRelation}
 
+    function RecurrentSeries{T,D}(seriesID::Symbol,
+                         size::NTuple{D,Int},
+                         variables::Vector{Num},
+                         center::Vector,
+                         coefficients::Array{Vector{T},D},
+                         order::Int,
+                         scalar_series_ref::Array{ScalarSeriesSymbol, D},
+                         relations::Vector{RecurrentRelation}) where {T,D}
+        rs = new(seriesID,
+                 size,
+                 variables,
+                 center,
+                 coefficients,
+                 order,
+                 scalar_series_ref,
+                 relations)
+        for sss in scalar_series_ref
+            sss.ps = rs
+        end
+        return rs
+    end
 end
 
 function RecurrentSeries{T}(seriesID::Symbol,
@@ -593,8 +741,9 @@ function RecurrentSeries{T}(seriesID::Symbol,
     for i in eachindex(coefficients)
         coefficients[i] = []
     end
-    RecurrentSeries{T,D}(seriesID, size, variables, center, 
-                         coefficients, -1, relations)
+    scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, idx, Dict()), keys(coefficients))
+    RecurrentSeries{T,D}(seriesID, size, variables, center, coefficients, -1, 
+                         scalar_series_ref, relations)
 end
 
 """
