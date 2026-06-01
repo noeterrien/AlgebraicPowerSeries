@@ -324,16 +324,23 @@ function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
 end
 
 """
-    selfseries_symbols(K, size...)
+    selfseries_symbols(size::Vararg{Int})
 
     Generates the ScalarSeriesSymbol with reference to the series :self of size size.
-    One can then easily generate SeriesCoefficients using K[scalar_series_idx][coefficient_indices]
+    After using K = selfseries_symbols(m, n), one can then easily generate 
+    SeriesCoefficients using K[scalar_series_idx][coefficient_indices]
+
+    ###Input 
+
+    - `size::Vararg{Int}` -- The size of the series array
+
+    ###Output
+
+    An array of size size containing ScalarSeriesSymbol that refer to series :selfs
 """
-macro selfseries_symbols(K, size...)
-    quote 
-        ci = reshape(collect(CartesianIndices($size)), $size)
-        $(esc(K)) = map(idx -> ScalarSeriesSymbol(:self, Tuple(idx), Dict()), ci)
-    end
+function selfseries_symbols(size::Vararg{Int}) 
+    ci = reshape(collect(CartesianIndices(size)), size)
+    map(idx -> ScalarSeriesSymbol(:self, Tuple(idx), Dict()), ci)
 end
 
 #-----------------------------------------------------------TaylorSeries-------------------------------------------------------------
@@ -449,6 +456,9 @@ function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
         f = build_function(expr, ps.variables...; expression=Val{false})
         vectorized_f(v) = f.((v+ps.center)...)
         dvpt = vectorized_f(js_var)
+        # ensure the returned dvpt is a TaylorSeries and not a constant
+        dvpt = dvpt isa TaylorSeries.AbstractSeries ? dvpt : dvpt * one(first(js_var)) 
+
         ps.coefficients[i] = []
         for same_order_coeffs in dvpt.coeffs
             for coeff in same_order_coeffs
@@ -463,7 +473,7 @@ end
 
 
 
-#------------------------------------------------------------RecursiveSeries----------------------------------------------------
+#------------------------------------------------------------ExpandableFormula----------------------------------------------------
 """
     ExpandableFormula
 
@@ -476,7 +486,7 @@ end
     - `unique_sym::Num` -- A unique symbol to represent the Expandable Formula in a 
       Symbolics relation
     - `formula::Num` -- The representation of the formula that must be expanded
-    - `fixed_indices::Vector` -- Indices that are present but are not use for expansion.
+    - `fixed_indices::Vector` -- Indices that are present but are not used for expansion.
       Might be either Num for abstract representation or Int for concrete representation
     - `varying_indices::Vector{Num}` -- Indices on which to expand
     - `varying_indices_ranges::Vector` -- The ranges between which varying indices should
@@ -577,6 +587,10 @@ function ExpandableFormula(efID::Symbol,
                       func)
 end
 
+macro expandable_formula()
+
+end 
+
 """
     substitute_known(formula, coeffs::Vector{SeriesCoefficient})
 
@@ -593,6 +607,130 @@ end
     - `result` -- The resulting formula
     - `unknowns::Vector{SeriesCoefficient}` -- The remaining unknown coefficients
 """
+
+#------------------------------------------------------Expandable Formula macros------------------------------------------------------
+"""
+    get_ranges_expressions(ranges...)
+
+    Given a number of Expr describing ranges, returns two expressions that once evaluated
+    return respectively a vector of varying indices and the range they vary accross
+
+    ###Input
+
+    - `ranges...` -- multiple Expr of the form :(i in m:n)
+
+    ###Output
+
+    Two expressions : :([i, ...]) and :([(m,n), ...])
+"""
+function get_ranges_expressions(ranges...)
+    variable_indices = []
+    variable_indices_ranges = []
+    for r in ranges
+        push!(variable_indices, :($(esc(r.args[2]))))
+        push!(variable_indices_ranges, :($(esc(r.args[3].args[2])), $(esc(r.args[3].args[3]))))
+    end
+    variable_indices_expr = Expr(:vect, variable_indices...)
+    variable_indices_ranges_expr = Expr(:vect, variable_indices_ranges...)
+
+    variable_indices_expr, variable_indices_ranges_expr
+end
+
+expandable_formula_macro_shortcuts_symbols = [:expandable_formula, Symbol("@∑")]
+expandable_formula_macro_shortcuts_functions = Dict(Symbol("@∑") => v -> +(v...))
+
+_substitute_syms(x) = x
+_substitute_syms(x::SeriesCoefficient) = x.sym
+_substitute_syms(x::ExpandableFormula) = x.sym
+
+"""
+    expandable_formula(func, fixed_indices, expr, ranges...)
+
+    A macro used to create ExpandableFormula object in a more practical way.
+
+    ###Input
+
+    - `func` -- The function that will be given to the ExpandedFormula
+    - `fixed_indices` -- A Vector of the fixed indices that might appear in the formula
+    - `expr` -- The expression that appears in the ExpandableFormula. Can use Symbolics'
+      Num objects but also SeriesCoefficient and ExpdandableFormula objects
+    - `ranges...` -- The ranges for the varying indices. These must be specified as
+      i in 0:j for instance
+
+    ###Output
+
+    The corresponding ExpandableFormula
+"""
+macro expandable_formula(func, fixed_indices, expr, ranges...)
+
+    # Retrieve Expr that can be used to get ranges in the expected form for ExpandableFormula objects
+    variable_indices_expr, variable_indices_ranges_expr = get_ranges_expressions(ranges...)
+    
+    # merge with fixed indices so that it can be passed to inner macro calls
+    variable_indices_symbols = [r.args[2] for r in ranges]
+    inner_fixed_indices = Expr(:vect, fixed_indices.args..., variable_indices_symbols...)
+
+
+    # Retrieve formula, SeriesCoefficient Vector and ExpandableFormula Vector
+    ## Auxiliary function that applies to expr
+    function aux(node, fixed_indices)
+        if node isa Symbol
+            :(apply_all($node))
+        elseif node isa Expr
+            #handle nested macros
+            if node.head==:macrocall && node.args[1] in expandable_formula_macro_shortcuts_symbols
+                new_node = Expr(:macrocall, node.args[1], node.args[2], inner_fixed_indices, node.args[3:end]...)
+                :(apply_all($new_node))
+            else
+                new_args = [aux(arg, fixed_indices) for arg in node.args]
+                new_node = Expr(node.head, new_args...)
+                :(apply_all($new_node))
+            end
+        else
+            node
+        end
+    end
+
+    formula_expr = aux(expr, fixed_indices)
+
+
+    quote
+        ## Define new variables and auxiliary functions
+        expandable_formulae = []
+        series_coeffs = []
+        push_expandable_formula_only(x) = (x isa ExpandableFormula && push!(expandable_formulae,x) ; x)
+        push_series_coefficient_only(x) = (x isa SeriesCoefficient && push!(series_coeffs, x) ; x)
+        apply_all = _substitute_syms ∘ push_expandable_formula_only ∘ push_series_coefficient_only
+
+        formula = $formula_expr
+        varying_indices = $variable_indices_expr
+        varying_indices_ranges = $variable_indices_ranges_expr
+        
+        sym = Symbol(string(formula)*" of "*string($fixed_indices)*" for "*string(varying_indices)*" in "*string(varying_indices_ranges))
+        num_sym, = Symbolics.variables(sym)
+
+        ExpandableFormula(sym, num_sym, formula, $fixed_indices, $variable_indices_expr, 
+                          $variable_indices_ranges_expr, expandable_formulae, series_coeffs, $func)
+
+    end
+
+
+end
+
+
+"""
+    ∑(fixed_indices, expr, ranges...)
+
+    A shortcut to @expandable_formula that can be used for convenience. Corresponds to 
+    @expandable_formula with the function v -> +(v...) as the first argument
+"""
+macro ∑(fixed_indices, expr, ranges...)
+    :(@expandable_formula expandable_formula_macro_shortcuts_functions[Symbol("@∑")] $fixed_indices $expr $(ranges...))
+end
+
+
+#---------------------------------------------------------RecurrentRelation----------------------------------------------------------------
+
 function substitute_known(formula, coeffs::Vector{SeriesCoefficient})
     d = Dict()
     unknowns = []
@@ -661,7 +799,7 @@ end
 
 
 
-
+#---------------------------------------------------------------RecurrentSeries---------------------------------------------------------
 
 """
     RecurrentSeries{T,D} <: PowerSeries{T,D}
