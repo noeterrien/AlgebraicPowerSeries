@@ -22,6 +22,7 @@ R1 = @recurrent_relation K[1][i,0] ~ 0 i in 0:(:∞)
 R2 = @recurrent_relation (@∑ K[1][i,j] j in 0:i) ~ -λ[1][i-1]/(2*i) i in 1:(:∞)
 R3 = @recurrent_relation (i-j)*(i-j-1)*K[1][i,j] - (j+2)*(j+1)*K[1][i,j+2] ~ (@∑ K[1][k,j]*λ[1][i-2-k] k in j:(i-2)) j in 0:(i-2) i in 2:(:∞)
 
+
 # recurrent series
 rs = RecurrentSeries{Float64}(:K, (1,), [x,y], [0,0], [R1,R2,R3])
 compute_coefficients!(rs, N)

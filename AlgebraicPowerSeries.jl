@@ -35,6 +35,16 @@ abstract type AbstractScalarSeriesSymbol end
 """
 abstract type PowerSeries{T,D} <: AbstractPowerSeries{D} end  
 
+function Base.show(io::IO, ps::PowerSeries)
+
+    monomials = compute_monomials(N, ps.variables, ps.center)
+    to_build = zeros(Num, ps.size)
+    for i in eachindex(ps.coefficients)
+        to_build[i] = sum(ps.coefficients[i][1:length(monomials)] .* monomials)
+    end
+
+    print(io, "PowerSeries ", String(ps.seriesID), " with coefficients : ", to_build...)
+end
 
 """
     build_matrix_elt(ps::PowerSeries, N::Int)
@@ -165,8 +175,7 @@ function SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol},
     SeriesCoefficient(ps, sym, u_sym, indices_expr, indices, index)
 end
 
-_exponent_parsing_dict = Dict('⁰' => '0', '¹' => '1', '²' => '2', '³' => '3', '⁴' => '4', 
-                              '⁵' => '5', '⁶' => '6', '⁷' => '7', '⁸' => '8', '⁹' => '9')
+Base.show(io::IO, sc::SeriesCoefficient) = print(io, sc.unique_sym)
 
 """
     parse_coeff_name(name::String)::Vector{String}
@@ -587,26 +596,14 @@ function ExpandableFormula(efID::Symbol,
                       func)
 end
 
-macro expandable_formula()
+function Base.show(io::IO, ef::ExpandableFormula) 
+    
+    @variables x y z
+    func_expr = "[x, y, z] -> "*string(ef.func([x,y,z]))
+    ranges_expressions = ["$i in $(r[1]):$(r[2]), " for (i,r) in zip(ef.varying_indices, ef.varying_indices_ranges)]
+    print(io, "Expandable formula (", func_expr, ") applied to (", ef.formula, ") for ", ranges_expressions..., " with fixed ", string(ef.fixed_indices...))
 
-end 
-
-"""
-    substitute_known(formula, coeffs::Vector{SeriesCoefficient})
-
-    Substitute all coefficients from the Vector coeffs in the formula by their value and
-    returns the unknown coefficients from the Vector
-
-    ###Input
-
-    - `formula` -- The formula in which to replace the coefficients
-    - `coeffs::Vector{SeriesCoefficient}` -- The series coefficients to replace
-
-    ###Output
-
-    - `result` -- The resulting formula
-    - `unknowns::Vector{SeriesCoefficient}` -- The remaining unknown coefficients
-"""
+end
 
 #------------------------------------------------------Expandable Formula macros------------------------------------------------------
 """
@@ -732,6 +729,22 @@ end
 
 #---------------------------------------------------------RecurrentRelation----------------------------------------------------------------
 
+"""
+    substitute_known(formula, coeffs::Vector{SeriesCoefficient})
+
+    Substitute all coefficients from the Vector coeffs in the formula by their value and
+    returns the unknown coefficients from the Vector
+
+    ###Input
+
+    - `formula` -- The formula in which to replace the coefficients
+    - `coeffs::Vector{SeriesCoefficient}` -- The series coefficients to replace
+
+    ###Output
+
+    - `result` -- The resulting formula
+    - `unknowns::Vector{SeriesCoefficient}` -- The remaining unknown coefficients
+"""
 function substitute_known(formula, coeffs::Vector{SeriesCoefficient})
     d = Dict()
     unknowns = []
@@ -797,6 +810,13 @@ struct RecurrentRelation
         )
     end
 end
+
+function Base.show(io::IO, rr::RecurrentRelation)
+    ranges_expressions = ["$i in $(r[1]):$(r[2]), " for (i,r) in zip(rr.indices, rr.indices_ranges)]
+    print(io, "RecurrentRelation ", rr.relation, " for ", ranges_expressions...)
+end
+
+
 
 """
     recurrent_relation(rel, ranges...)
