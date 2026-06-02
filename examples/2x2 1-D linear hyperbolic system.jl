@@ -72,7 +72,7 @@ md"""
 
 # ╔═╡ 9cd56389-61d8-4641-828a-b46180e8e891
 begin
-	C = TaylorExpansionSeries{Float64}(:C, [x], [0;cos(x);;sin(x);0], [0])
+	C = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(x);1+2*exp(x);;sin(2*x);1/(3+x^2)], [0])
 	compute_coefficients!(C, N)
 end; nothing
 
@@ -118,10 +118,42 @@ md"""
 
 # ╔═╡ 5894eeff-f2eb-4f3a-8976-5fb74a145fc0
 begin
-	R31 = @recurrent_relation (@∑ (k+1)*K[1,1][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) + (@∑ (k+1)*K[1,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~ -(@∑ (j-k+1)*K[1,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) - (@∑ K[1,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
-	R32 = @recurrent_relation (@∑ (k+1)*K[1,2][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) - (@∑ (k+1)*K[1,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~  (@∑ (j-k+1)*K[1,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) - (@∑ K[1,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
-	R33 = @recurrent_relation (@∑ (k+1)*K[2,1][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) - (@∑ (k+1)*K[2,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~  (@∑ (j-k+1)*K[2,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) + (@∑ K[2,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
-	R34 = @recurrent_relation (@∑ (k+1)*K[2,2][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) + (@∑ (k+1)*K[2,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~ -(@∑ (j-k+1)*K[2,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) + (@∑ K[2,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
+	R31 = @recurrent_relation(
+			  (@∑ (k+1)*K[1,1][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) 
+			+ (@∑ (k+1)*K[1,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~   
+			- (@∑ (j-k+1)*K[1,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) 
+			- (@∑ K[1,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) 
+			+ (@∑ K[1,1][k+j,j]*C[1,1][i-1-j-k] k in 0:(i-1-j))
+			- (@∑ K[1,1][i-1-j+k,k]*C[1,1][j-k] k in 0:j),
+			j in 0:(i-1), i in 0:(:∞)
+		)
+	R32 = @recurrent_relation(
+		      (@∑ (k+1)*K[1,2][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j))
+		    - (@∑ (k+1)*K[1,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~  
+			  (@∑ (j-k+1)*K[1,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) 
+			- (@∑ K[1,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) 
+			+ (@∑ K[1,2][k+j,j]*C[1,1][i-1-j-k] k in 0:(i-1-j))
+			- (@∑ K[1,2][i-1-j+k,k]*C[2,2][j-k] k in 0:j),
+			j in 0:(i-1), i in 0:(:∞)
+		)
+	R33 = @recurrent_relation(
+			  (@∑ (k+1)*K[2,1][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) 
+			- (@∑ (k+1)*K[2,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~  
+			  (@∑ (j-k+1)*K[2,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) 
+			+ (@∑ K[2,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) 
+			- (@∑ K[2,1][k+j,j]*C[2,2][i-1-j-k] k in 0:(i-1-j))
+			+ (@∑ K[2,1][i-1-j+k,k]*C[1,1][j-k] k in 0:j),
+			j in 0:(i-1), i in 0:(:∞)
+		) 
+	R34 = @recurrent_relation(
+			  (@∑ (k+1)*K[2,2][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) 
+			+ (@∑ (k+1)*K[2,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~ 
+			- (@∑ (j-k+1)*K[2,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) 
+			+ (@∑ K[2,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) 
+			- (@∑ K[2,2][k+j,j]*C[2,2][i-1-j-k] k in 0:(i-1-j))
+			+ (@∑ K[2,2][i-1-j+k,k]*C[2,2][j-k] k in 0:j),
+			j in 0:(i-1), i in 0:(:∞)
+		)
 end; nothing
 
 # ╔═╡ ebf696cb-3e04-4ead-b5fa-23c0991a8eb1
@@ -178,7 +210,7 @@ end
 foreach(ax -> axislegend(ax; position=:rt), axs)
 
 # ╔═╡ 12b0551e-c67a-485b-80e0-6d00e91bf853
-display(fig)
+fig
 
 # ╔═╡ Cell order:
 # ╟─b34ceca0-58f9-11f1-9c39-fd7d92bf34d9
