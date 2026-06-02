@@ -5,28 +5,70 @@ include("../AlgebraicPowerSeries.jl")
 @variables x y z
 @variables i j k 
 
+#---------------------------------using 1-D reaction diffusion equation with space-varying reaction example--------------------------------
+
 #parameters
 N = 10
-q = 1
+
+# (λ+c)/ε function
+λ = TaylorExpansionSeries{Float64}(:sin, [x], [sin(x)], [0])
+compute_coefficients!(λ, N)
+
+# kernel representation
+K = selfseries_symbols(1)
+
+# recurrent relations
+R1 = @recurrent_relation K[1][i,0] ~ 0 i in 0:(:∞)
+R2 = @recurrent_relation (@∑ K[1][i,j] j in 0:i) ~ -λ[1][i-1]/(2*i) i in 1:(:∞)
+R3 = @recurrent_relation (i-j)*(i-j-1)*K[1][i,j] - (j+2)*(j+1)*K[1][i,j+2] ~ (@∑ K[1][k,j]*λ[1][i-2-k] k in j:(i-2)) j in 0:(i-2) i in 2:(:∞)
+
+# recurrent series
+rs = RecurrentSeries{Float64}(:K, (1,), [x,y], [0,0], [R1,R2,R3])
+compute_coefficients!(rs, N)
+
+# tests
+@test rs.coefficients[1][1:10] ≈ [0,0,0,0,-1/4,0,0,0,0,0]
+
+#-----------------------------------------------using 2x2 1-D linear hyperbolic system------------------------------------------------------
+
+#parameters
+N=10
+q=1
 
 # Σ function
-Σ = TaylorExpansionSeries{Float64}(:Σ, [x], [1.2+x^3; 0 ;; 0 ; 1.5+x^2], [0])
+Σ = TaylorExpansionSeries{Float64}(:Σ, [x], [1+x^2;0;;0;exp(x)], [0])
 compute_coefficients!(Σ, N+1); println("coefficients computed for Σ up to order $(N+1)")
 
 # C function
-C = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(x);1+2*exp(x);;sin(2*x);1/(3+x^2)], [0])
+C = TaylorExpansionSeries{Float64}(:C, [x], [0;cos(x);;sin(x);0], [0])
 compute_coefficients!(C, N); println("coefficients computed for C up to order $N")
 
-# unknown series
+# kernel representation
 K = selfseries_symbols(2,2)
 
-# Relations of recurrence
-R11 = RecurrentRelation(K[1,1][i,0].sym ~ Σ[2,2][0].sym/(q*Σ[1,1][0].sym)*K[1,2][i,0].sym, [i], [(0, :∞)], [K[1,1][i,0], Σ[2,2][0], Σ[1,1][0], K[1,2][i,0]], [])
+# relations of recurrence
+R11 = @recurrent_relation K[1,1][i,0] ~ Σ[2,2][0]/(q*Σ[1,1][0])*K[1,2][i,0] i in 0:(:∞)
+R12 = @recurrent_relation K[2,1][i,0] ~ Σ[2,2][0]/(q*Σ[1,1][0])*K[2,2][i,0] i in 0:(:∞)
 
-@variables ΣKᵘᵛₖⱼ ΣΣKᵘᵛₖⱼ
-EF211 = ExpandableFormula(:ΣKᵘᵛₖⱼ,  ΣKᵘᵛₖⱼ , K[1,2][k,j].sym, [k], [j], [(0,k)], [], [K[1,2][k,j]], sum)
-EF21  = ExpandableFormula(:ΣΣKᵘᵛₖⱼ, ΣΣKᵘᵛₖⱼ, EF211.sym*(Σ[1,1][i-k].sym + Σ[2,2][i-k].sym), [i], [k], [(0,i)], [EF211], [Σ[1,1][i-k], Σ[2,2][i-k]], sum)
-R21 = RecurrentRelation(EF21.sym ~ C[1,2][i].sym, [i], [(0, :∞)], [C[1,2][i]], [EF21])
+R21 = @recurrent_relation (@∑ K[1,2][k,j]*(Σ[1,1][i-k]+Σ[2,2][i-k]) j in 0:k k in 0:i) ~  C[1,2][i] i in 0:(:∞)
+R22 = @recurrent_relation (@∑ K[2,1][k,j]*(Σ[1,1][i-k]+Σ[2,2][i-k]) j in 0:k k in 0:i) ~ -C[2,1][i] i in 0:(:∞)
 
+R31 = @recurrent_relation (@∑ (k+1)*K[1,1][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) + (@∑ (k+1)*K[1,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~ -(@∑ (j-k+1)*K[1,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) - (@∑ K[1,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
+R32 = @recurrent_relation (@∑ (k+1)*K[1,2][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) - (@∑ (k+1)*K[1,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~  (@∑ (j-k+1)*K[1,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) - (@∑ K[1,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
+R33 = @recurrent_relation (@∑ (k+1)*K[2,1][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) - (@∑ (k+1)*K[2,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~  (@∑ (j-k+1)*K[2,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) + (@∑ K[2,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
+R34 = @recurrent_relation (@∑ (k+1)*K[2,2][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) + (@∑ (k+1)*K[2,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~ -(@∑ (j-k+1)*K[2,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) + (@∑ K[2,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) j in 0:(i-1) i in 0:(:∞)
 
-ef = @∑ [i] (@∑ K[1,2][k,j] j in 0:k)*(Σ[1,1][i-k] + Σ[2,2][i-k]) k in 0:i#
+# recurrent series
+coupled_rs = RecurrentSeries{Float64}(:crs, (2,2), [x,y], [0,0], [R11, R12, R21, R22, R31, R32, R33, R34])
+compute_coefficients!(coupled_rs, N; verbose=1)
+
+# tests
+@test coupled_rs.coefficients[1,1][1:6] ≈ [0, 1/4, -1/4, 3/32, -7/16, 3/32]
+@test coupled_rs.coefficients[1,2][1:6] ≈ [0, 1/4, 1/4, 3/32, -1/16, -9/32]
+@test coupled_rs.coefficients[2,1][1:6] ≈ [-1/2, -1/8, 3/8, 5/64, 5/32, 17/64]
+@test coupled_rs.coefficients[2,2][1:6] ≈ [-1/2, -1/8, 5/8, 5/64, 3/32, -43/64]
+
+built_function = build(coupled_rs, 2)
+@test built_function(0,0) ≈ [0;-1/2;;0;-1/2]
+@test built_function(1,1) ≈ [-1/4;1/4;;1/4;-1/2]
+@test built_function(1,2) ≈ [-21/32;101/64;;-13/32;-115/64]

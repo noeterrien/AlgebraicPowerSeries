@@ -655,7 +655,8 @@ _substitute_syms(x::ExpandableFormula) = x.sym
     - `expr` -- The expression that appears in the ExpandableFormula. Can use Symbolics'
       Num objects but also SeriesCoefficient and ExpdandableFormula objects
     - `ranges...` -- The ranges for the varying indices. These must be specified as
-      i in 0:j for instance
+      i in 0:j for instance. Each index range must be deducible from the
+      indices ranges that come next (i.e i in 1:j j in 0:5 for instance)
 
     ###Output
 
@@ -709,8 +710,8 @@ macro expandable_formula(func, fixed_indices, expr, ranges...)
         sym = Symbol(string(formula)*" of "*string($fixed_indices)*" for "*string(varying_indices)*" in "*string(varying_indices_ranges))
         num_sym, = Symbolics.variables(sym)
 
-        ExpandableFormula(sym, num_sym, formula, $fixed_indices, $variable_indices_expr, 
-                          $variable_indices_ranges_expr, expandable_formulae, series_coeffs, $func)
+        ExpandableFormula(sym, num_sym, formula, $fixed_indices, reverse($variable_indices_expr), 
+                          reverse($variable_indices_ranges_expr), expandable_formulae, series_coeffs, $func)
 
     end
 
@@ -797,7 +798,73 @@ struct RecurrentRelation
     end
 end
 
+"""
+    recurrent_relation(rel, ranges...)
 
+    A macro used to create RecurrentRelation objects in a more practical way.
+
+    ###Input
+
+    - `rel` -- The relation to parse to a recurrent_relation. Can use Symbolics'
+      Num objects but also SeriesCoefficient and ExpandableFormula objects
+    - `ranges...` -- The ranges for the indices. These must be specified as
+      i in 0:j for instance. Each range must be numerically deducible from the
+      ranges that come afterwards. For isntance i in 0:j j in k:l k in 0:(:∞) l in 0:4
+
+    ###Output
+
+    The corresponding ExpandableFormula
+"""
+macro recurrent_relation(rel, ranges...)
+
+    # Retrieve Expr that can be used to get ranges in the expected form for ExpandableFormula objects
+    indices_expr, indices_ranges_expr = get_ranges_expressions(ranges...)
+    
+    # merge with fixed indices so that it can be passed to inner macro calls
+    indices_symbols = [r.args[2] for r in ranges]
+    inner_indices = Expr(:vect, indices_symbols...)
+
+
+    # Retrieve formula, SeriesCoefficient Vector and ExpandableFormula Vector
+    ## Auxiliary function that applies to expr
+    function aux(node)
+        if node isa Symbol
+            :(apply_all($node))
+        elseif node isa Expr
+            #handle nested macros
+            if node.head==:macrocall && node.args[1] in expandable_formula_macro_shortcuts_symbols
+                new_node = Expr(:macrocall, node.args[1], node.args[2], inner_indices, node.args[3:end]...)
+                :(apply_all($new_node))
+            else
+                new_args = [aux(arg) for arg in node.args]
+                new_node = Expr(node.head, new_args...)
+                :(apply_all($new_node))
+            end
+        else
+            node
+        end
+    end
+
+    relation_expr = aux(rel)
+
+
+    quote
+        ## Define new variables and auxiliary functions
+        expandable_formulae = []
+        series_coeffs = []
+        push_expandable_formula_only(x) = (x isa ExpandableFormula && push!(expandable_formulae,x) ; x)
+        push_series_coefficient_only(x) = (x isa SeriesCoefficient && push!(series_coeffs, x) ; x)
+        apply_all = _substitute_syms ∘ push_expandable_formula_only ∘ push_series_coefficient_only
+
+        relation = $relation_expr
+        indices = $indices_expr
+        indices_ranges = $indices_ranges_expr
+
+        RecurrentRelation(relation, reverse(indices), reverse(indices_ranges), series_coeffs, expandable_formulae)
+
+    end
+
+end
 
 #---------------------------------------------------------------RecurrentSeries---------------------------------------------------------
 
@@ -879,7 +946,7 @@ function RecurrentSeries{T}(seriesID::Symbol,
     for i in eachindex(coefficients)
         coefficients[i] = []
     end
-    scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, idx, Dict()), keys(coefficients))
+    scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, tuple(idx), Dict()), keys(coefficients))
     RecurrentSeries{T,D}(seriesID, size, variables, center, coefficients, -1, 
                          scalar_series_ref, relations)
 end
@@ -1187,14 +1254,15 @@ end
     
     - `ps::RecurrentSeries` -- a RecurrentSeries
     - `N::Int` -- The order up to which coefficients should be computed
-    - `verbose=false` -- named argument. If set to true, indicates when a new order is 
-      being computed and when it is done in the console
+    - `verbose=0` -- named argument. If set to 1, indicates when a new order is 
+      being computed and when it is done in the console. If set to 2, shows the
+      expanded equations and unknowns in addition to the order being computed
 
     ###Output
 
     Nothing
 """
-function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=false) where {T,D}
+function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=0) where {T,D}
 
     if ps.order ≥ N 
         return
@@ -1204,7 +1272,7 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=false) 
         compute_coefficients!(ps, N-1; verbose=verbose)
     end
     
-    verbose && println("Computing coefficients of order $N")
+    verbose >= 1 && println("Computing coefficients of order $N")
     # compute for order N
     # Expand all equations
     equations, unknowns = Equation[], Num[]
@@ -1214,6 +1282,17 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=false) 
         unknowns = [unknowns; new_unknowns]
     end
     unknowns = unique(unknowns)
+
+    if verbose >= 2
+        println()
+        println("EQUATIONS for order $N :")
+        for equation in equations
+            println(equation)
+        end
+        println("unknowns for order $N :")
+        println(unknowns)
+        println()
+    end
 
     # solve for coefficients
     unsorted_coeffs = symbolic_linear_solve(equations, unknowns)
@@ -1235,6 +1314,6 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=false) 
     end
     ps.order += 1
 
-    verbose && println("Coefficients computed up to order $N")
+    verbose >= 1 && println("Coefficients computed up to order $N")
     return
 end

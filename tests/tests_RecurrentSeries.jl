@@ -42,7 +42,7 @@ compute_coefficients!(rs, 3)
 
 #-----------------------------------------------2x2 1-D linear hyperbolic system--------------------------------------------------
 # parameters
-N=10
+N=3
 q=1 # c₁ = c₄ = 0
 
 # Σ function and coefficients
@@ -140,7 +140,7 @@ coupled_rs = RecurrentSeries{Float64}(:crs, (2,2), [x,y], [0,0], [R11, R12, R21,
 
 # print("Coefficients computation for hyperbolic 2x2 series up to order $N takes on average : ")
 # @btime compute_coefficients!(coupled_rs, N); 
-compute_coefficients!(coupled_rs, N; verbose=true)
+compute_coefficients!(coupled_rs, N; verbose=1)
 @test coupled_rs.coefficients[1,1][1:6] ≈ [0, 1/4, -1/4, 3/32, -7/16, 3/32]
 @test coupled_rs.coefficients[1,2][1:6] ≈ [0, 1/4, 1/4, 3/32, -1/16, -9/32]
 @test coupled_rs.coefficients[2,1][1:6] ≈ [-1/2, -1/8, 3/8, 5/64, 5/32, 17/64]
