@@ -74,18 +74,20 @@ function decode_IntVector(t::String)::Vector{Int}
 end
 
 """
-    convertIndices(I::Vararg{Int64, Didx}) where Didx
+    convertIndices(I::Vararg{Int64})
 
     Converts indices of the form a₀₀₀ + a₁₀₀ x + a₁₁₀ y + a₁₁₁ z + a₂₀₀ x² + a₂₁₀ xy + 
     a₂₁₁ xz + a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ... to an index of the the form 
     b₁ + b₂ x + b₃ y + b₄ z + b₅ x² + b₆ xy + b₇ xz + b₈ y² + b₉ yz + b₁₀ z² + ... 
 """
-function convertIndices(I::Vararg{Int64, Didx}) where Didx
-    idx = 1
-    for (n,i) in zip(Didx:-1:1, I)
-        idx += Base.sum([binomial(k+n-1,n-1) for k in 0:i-1])
+function convertIndices(I::Vararg{Int64})
+    fst_nonzero = isnothing(findfirst(==(0), I)) ? length(I) : findfirst(==(0), I) - 1
+    if fst_nonzero == 0
+        return 1
+    else
+        new_idx = [I[1:fst_nonzero-1]..., [I[fst_nonzero]-1 for _ in fst_nonzero:length(I)]...]
+        return 1 + convertIndices(new_idx...)
     end
-    idx
 end
 
 """

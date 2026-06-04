@@ -37,13 +37,16 @@ abstract type PowerSeries{T,D} <: AbstractPowerSeries{D} end
 
 function Base.show(io::IO, ps::PowerSeries)
 
-    monomials = compute_monomials(N, ps.variables, ps.center)
-    to_build = zeros(Num, ps.size)
-    for i in eachindex(ps.coefficients)
-        to_build[i] = sum(ps.coefficients[i][1:length(monomials)] .* monomials)
+    if ps.order >= 0
+        monomials = compute_monomials(ps.order, ps.variables, ps.center)
+        to_build = zeros(Num, ps.size)
+        for i in eachindex(ps.coefficients)
+            to_build[i] = sum(ps.coefficients[i][1:length(monomials)] .* monomials)
+        end
+        print(io, "PowerSeries ", ps.seriesID, " with coefficients : ", to_build)
+    else 
+        print(io, "PowerSeries ", ps.seriesID, ", no coefficients computed yet")
     end
-
-    print(io, "PowerSeries ", String(ps.seriesID), " with coefficients : ", to_build...)
 end
 
 """
@@ -332,6 +335,23 @@ function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
     end
 end
 
+function Base.show(io::IO, sss::ScalarSeriesSymbol)
+    if sss.ps == :self
+        print(io, "ScalarSeriesSymbol refering to series :self at index ", sss.scalar_idx)
+    elseif isnothing(sss.ps )
+        print(io, "ScalarSeriesSymbol refering to unitialized series (nothing) at index ", sss.scalar_idx)
+    else
+        if sss.ps.order < 0
+            print(io, "ScalarSeriesSymbol refering to series ", sss.ps.seriesID, ". No coefficients computed yet")
+        else
+            monomials = compute_monomials(sss.ps.order, sss.ps.variables, sss.ps.center)
+            to_build = sum(sss.ps.coefficients[sss.scalar_idx...][1:length(monomials)] .* monomials)
+            print(io, "ScalarSeriesSymbol refering to series ", sss.ps.seriesID, " at index ", sss.scalar_idx,
+                      ". Computed coefficients are : ", to_build)
+        end
+    end
+end
+
 """
     selfseries_symbols(size::Vararg{Int})
 
@@ -466,7 +486,7 @@ function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
         vectorized_f(v) = f.((v+ps.center)...)
         dvpt = vectorized_f(js_var)
         # ensure the returned dvpt is a TaylorSeries and not a constant
-        dvpt = dvpt isa TaylorSeries.AbstractSeries ? dvpt : dvpt * one(first(js_var)) 
+        dvpt = dvpt isa TaylorSeries.AbstractSeries ? dvpt : dvpt * one(first(js_var))
 
         ps.coefficients[i] = []
         for same_order_coeffs in dvpt.coeffs
@@ -601,7 +621,7 @@ function Base.show(io::IO, ef::ExpandableFormula)
     @variables x y z
     func_expr = "[x, y, z] -> "*string(ef.func([x,y,z]))
     ranges_expressions = ["$i in $(r[1]):$(r[2]), " for (i,r) in zip(ef.varying_indices, ef.varying_indices_ranges)]
-    print(io, "Expandable formula (", func_expr, ") applied to (", ef.formula, ") for ", ranges_expressions..., " with fixed ", string(ef.fixed_indices...))
+    print(io, "Expandable formula (", func_expr, ") applied to (", ef.formula, ") for ", ranges_expressions..., " with fixed ", string(ef.fixed_indices))
 
 end
 
@@ -704,7 +724,7 @@ macro expandable_formula(func, fixed_indices, expr, ranges...)
         varying_indices = $variable_indices_expr
         varying_indices_ranges = $variable_indices_ranges_expr
         
-        sym = Symbol(string(formula)*" of "*string($fixed_indices)*" for "*string(varying_indices)*" in "*string(varying_indices_ranges))
+        sym = Symbol("ExpandableFormula{"*string(formula)*" of "*string($fixed_indices)*" for "*string(varying_indices)*" in "*string(varying_indices_ranges)*"}")
         num_sym, = Symbolics.variables(sym)
 
         ExpandableFormula(sym, num_sym, formula, $fixed_indices, reverse($variable_indices_expr), 
@@ -733,7 +753,7 @@ end
     substitute_known(formula, coeffs::Vector{SeriesCoefficient})
 
     Substitute all coefficients from the Vector coeffs in the formula by their value and
-    returns the unknown coefficients from the Vector
+    returns the unknown coefficients of the Vector
 
     ###Input
 
@@ -750,13 +770,9 @@ function substitute_known(formula, coeffs::Vector{SeriesCoefficient})
     unknowns = []
     for coeff in coeffs
         if coeff.ps != :self
-            indices = Int[] 
-            for idx_expr in coeff.indices_expr
-                push!(indices, 
-                      Symbolics.value(idx_expr))
-            end
 
-            d[coeff.unique_sym] = getValue(coeff, indices)
+            d[coeff.unique_sym] = getValue(coeff, Int[])
+
         else
             push!(unknowns, coeff)
         end
@@ -1275,8 +1291,9 @@ end
     - `ps::RecurrentSeries` -- a RecurrentSeries
     - `N::Int` -- The order up to which coefficients should be computed
     - `verbose=0` -- named argument. If set to 1, indicates when a new order is 
-      being computed and when it is done in the console. If set to 2, shows the
-      expanded equations and unknowns in addition to the order being computed
+      being computed and when it is done in the console. If set to 2 or more, shows the
+      expanded equations and unknowns in addition to the order being computed.
+      If set to 3 or more, shows the value associated with each unknown.
 
     ###Output
 
@@ -1316,6 +1333,16 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=0) wher
 
     # solve for coefficients
     unsorted_coeffs = symbolic_linear_solve(equations, unknowns)
+    if verbose >= 3
+        println("computed coefficients : ")
+        for (uk, val) in zip(unknowns, unsorted_coeffs)
+            print(uk)
+            print(" => ")
+            print(val)
+            println(", ")
+        end
+        println()
+    end
     unsorted_coeffs = Symbolics.value.(unsorted_coeffs)
 
     # set series coefficients
@@ -1326,7 +1353,7 @@ function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=0) wher
     for i in eachindex(ps.coefficients)
             old_length = length(ps.coefficients[i])
             new_spaces = Vector{T}(undef, max_idx-old_length)
-            ps.coefficients[i] = [ps.coefficients[i];new_spaces]
+            ps.coefficients[i] = [ps.coefficients[i];new_spaces] # concatenation => copy so its not all the same vector ✓
     end
     ## fill
     for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 

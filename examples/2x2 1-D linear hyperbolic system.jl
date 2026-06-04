@@ -210,7 +210,7 @@ end
 foreach(ax -> axislegend(ax; position=:rt), axs)
 
 # ╔═╡ 12b0551e-c67a-485b-80e0-6d00e91bf853
-fig
+display(fig)
 
 # ╔═╡ Cell order:
 # ╟─b34ceca0-58f9-11f1-9c39-fd7d92bf34d9
