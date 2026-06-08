@@ -7,11 +7,11 @@ include("../AlgebraicPowerSeries.jl")
 
 sin_ps = TaylorExpansionSeries{Float64}(:sin, [x], [sin(x)], [0])
 compute_coefficients!(sin_ps, 5)
-@test sin_ps[1] ≈ [0,1,0,-1/6,0,1/120]
+@test sin_ps.coefficients[1] ≈ [0,1,0,-1/6,0,1/120]
 
 sincos_ps = TaylorExpansionSeries{Float64}(:sincos, [x,y], [sin(x)cos(y)], [0,0])
 compute_coefficients!(sincos_ps, 3)
-@test sincos_ps[1] ≈ [0,1,0,0,0,0,-1/6,0,-1/2,0]
+@test sincos_ps.coefficients[1] ≈ [0,1,0,0,0,0,-1/6,0,-1/2,0]
 
 multidim_sin_ps = TaylorExpansionSeries{Float64}(:mutlidim_sin, [x,y,z,t], sin.([x;y;;z;t]), [0,0,0,0])
 compute_coefficients!(multidim_sin_ps, 3)
