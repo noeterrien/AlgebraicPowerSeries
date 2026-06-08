@@ -74,21 +74,38 @@ function decode_IntVector(t::String)::Vector{Int}
 end
 
 """
-    convertIndices(I::Vararg{Int64})
+    convertIndices_trunc_to_lin(I::Vararg{Int64})
 
     Converts indices of the form a₀₀₀ + a₁₀₀ x + a₁₁₀ y + a₁₁₁ z + a₂₀₀ x² + a₂₁₀ xy + 
     a₂₁₁ xz + a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ... to an index of the the form 
     b₁ + b₂ x + b₃ y + b₄ z + b₅ x² + b₆ xy + b₇ xz + b₈ y² + b₉ yz + b₁₀ z² + ... 
 """
-function convertIndices(I::Vararg{Int64})
+function convertIndices_trunc_to_lin(I::Vararg{Int64})
     fst_nonzero = isnothing(findfirst(==(0), I)) ? length(I) : findfirst(==(0), I) - 1
     if fst_nonzero == 0
         return 1
     else
         new_idx = [I[1:fst_nonzero-1]..., [I[fst_nonzero]-1 for _ in fst_nonzero:length(I)]...]
-        return 1 + convertIndices(new_idx...)
+        return 1 + convertIndices_trunc_to_lin(new_idx...)
     end
 end
+
+"""
+    convertIndices_fullsym_to_trunc(I:vararg{Int64})
+
+    Converts indices of the form a₀₀₀ + a₁₀₀ x + a₀₁₀ y + a₀₀₁ z + a₁₁₀ xy + ...
+    to indices of the form a₀₀₀ + a₁₀₀ x + a₁₁₀ y + a₁₁₁ z + a₂₀₀ x² + a₂₁₀ xy + 
+    a₂₁₁ xz + a₂₂₀ y² + a₂₂₁ yz + a₂₂₂ z² + ...
+
+    ###Input
+
+    - `I::Vararg{Int64}` -- The input index
+
+    ###Output
+
+    A vector of the output index
+"""
+convertIndices_fullsym_to_trunc(I::Vararg{Int64}) = [+(I[i:end]...) for i in 1:length(I)]
 
 """
     decode_coeffIndex(u_sym::Num)::Tuple{Vector{Int}, Int}

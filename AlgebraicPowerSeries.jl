@@ -138,9 +138,7 @@ build(ps::PowerSeries) = build(ps, ps.order)
     - `sym::Num` -- The symbol representing the coefficient
     - `unique_sym::Num` -- A unique symbolic representation automatically attributed to 
       identify the coefficient throughout several different expressions
-    - `indices_expr::Vector{Num}` -- The indices it refers to inside a scalar series. For 
-      instance [i+2, j] in K₍ᵢ₊₂₎ⱼ where i and j are Symbolics variables
-    - `indices::Vector{Num}` -- the indices that appear in the indices_expr
+    - `indices::Vector{Int}` -- The index of a scalar series coefficient
     - `index::NTuple{Int, D}` -- The index of the scalar series it refers to when using
       multidimensional series
 
@@ -148,8 +146,7 @@ build(ps::PowerSeries) = build(ps, ps.order)
 
     - `SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol}, 
                          sym::Num,
-                         indices_expr::Vector
-                         indices::Vector{Num},
+                         indices::Vector{Int},
                          index::NTuple{Int, D}) where D` -- default constructor
 
 """
@@ -157,74 +154,36 @@ struct SeriesCoefficient{D}
     ps::Union{AbstractPowerSeries{D}, Symbol}
     sym::Num
     unique_sym::Num
-    indices_expr::Vector
-    indices::Vector{Num}
+    indices::Vector{Int}
     index::NTuple{D, Int}
 end
 
 function SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol},
                            sym::Num,
-                           indices_expr::Vector,
-                           indices::Vector{Num},
+                           indices::Vector{Int},
                            index::NTuple{D,Int}) where D
 
     if ps == :self
-        u_sym = Symbol(string(:self) * string(index) * string(Num.(indices_expr))) # unique id
+        u_sym = Symbol("self$index$indices") # unique id
     else
-        u_sym = Symbol(string(ps.seriesID) * string(index) * string(Num.(indices_expr))) # unique id
+        u_sym = Symbol("$(ps.seriesID)$index$indices") # unique id
     end
     u_sym, = @variables $u_sym
 
-    SeriesCoefficient(ps, sym, u_sym, indices_expr, indices, index)
+    SeriesCoefficient(ps, sym, u_sym, indices, index)
 end
 
 Base.show(io::IO, sc::SeriesCoefficient) = print(io, sc.unique_sym)
 
-"""
-    parse_coeff_name(name::String)::Vector{String}
-
-    Gets a SeriesCoefficient indices expressions that appear in a specifically formatted 
-    expression
-
-    ###Input
-
-    - `name::String` -- The formatted expression of a series coefficient :
-
-      * The character '_' indicates a new index in the coefficient scalar series indices
-      * This character must then be followed by a sequence of characters s that can be
-        parsed to a Num using Symbolics.unwrap(eval(Meta.parse(string(s))))
-
-      For instance, K²³_(i+j)_j will output ["(i+j)","j"]
-
-    ###Output
-    
-    A Vector{String} containing the coefficient indices expressions
-"""
-function parse_coeff_name(name::String)::Tuple{Vector{String}, Vector{String}}
-    idcs = []
-    
-    found_first_index = false
-    for c in name
-        if c == '_'
-            push!(idcs, "")
-            found_first_index = true
-        elseif found_first_index
-            idcs[end] *= c
-        end
-    end
-
-    idcs
-end
 
 """
-    getValue(sc::SeriesCoefficient, at::Vector{Int})
+    getValue(sc::SeriesCoefficient)
 
-    Returns the value of the coefficient
+    Returns the value of the coefficient. If it has not been computed yet, throws an error
 
     ###Input
 
     - `sc::SeriesCoefficient` -- a SeriesCoefficient
-    - `at::Vector{Int}` -- The values the coefficient's indices should be replaced with
 
     ###Output
 
@@ -234,36 +193,18 @@ end
     Otherwise, throws an error
 
 """
-function getValue(sc::SeriesCoefficient, at::Vector{Int})
+function getValue(sc::SeriesCoefficient)
     if sc.ps!=:self
-        # first evaluate the indices
-        d = Dict([i=>v for (i,v) in zip(sc.indices, at)])
-        idx = []
-        for expr in sc.indices_expr
-            push!(idx, Symbolics.value(substitute(expr, d, fold=Val(true))))
+        if sc.indices[1] ≤ sc.ps.order
+            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
+        else
+            throw(ArgumentError("Coefficient at index $(sc.indices) not computed yet. Cannot get value"))
         end
-        
-        # then return the result
-        return sc.ps.coefficients[sc.index...][convertIndices(idx...)]
     else
         throw(ArgumentError("Cannot return value of a coefficient which refers to series
                              :self"))
     end
 end
-
-
-"""
-    getUniqueSym(sc::SeriesCoefficient)
-
-    Returns unique_sym attribute of a SeriesCoefficient
-
-    ###Input
-    - `sc::SeriesCoefficient`
-
-    ###Output
-    sc.unique_sym
-"""
-getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
 #-----------------------------------------------------------SeriesSymbol-------------------------------------------------------------
 
@@ -274,7 +215,7 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
 
     ###Fields
 
-    - `ps::Union{PowerSeries, Symbol, Nothing}` -- The PowerSeries it refers to or :self
+    - `ps::Union{Nothing, PowerSeries, Symbol}` -- The PowerSeries it refers to or :self
     - `scalar_idx::Tuple` -- The index of the ScalarSeries in the PowerSeries matrix
     - `coefficients::Dict{Tuple, SeriesCoefficient}` -- The SeriesCoefficients stored
 
@@ -285,7 +226,7 @@ getUniqueSym(sc::SeriesCoefficient) = sc.unique_sym
       method
 """
 mutable struct ScalarSeriesSymbol <: AbstractScalarSeriesSymbol
-    ps::Union{PowerSeries, Symbol, Nothing}
+    ps::Union{Nothing, PowerSeries, Symbol}
     scalar_idx::Tuple
     coefficients::Dict{Vector, SeriesCoefficient}
 end
@@ -308,38 +249,32 @@ end
 Base.getindex(ps::AbstractPowerSeries{D}, I::Vararg{Int64, D}) where D = ps.scalar_series_ref[I...]
 
 """
-    Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
+    Base.getindex(sss::ScalarSeriesSymbol, I::Vararg{Int})
 
     Create (if necessary) and returns a SeriesCoefficient at index I. The coefficient is
     then saved in the ScalarSeriesSymbol to be accessible at any time
 """
-function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg)
+function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg{Int})
     vI = Vector([I...])
     if vI ∈ keys(sss.coefficients)
-        return sss.coefficients[vI]
+        sss.coefficients[vI]
     else
         if sss.ps == :self
-            sym = Symbol(string(:self) * string(sss.scalar_idx) * string(Num.(vI)))
+            sym = Symbol("self$(sss.scalar_idx)$vI")
             sym, = @variables $sym
-            sss.coefficients[vI] = SeriesCoefficient(:self, sym, vI, getAllVariables(vI), sss.scalar_idx)
+            sss.coefficients[vI] = SeriesCoefficient(:self, sym, vI, sss.scalar_idx)
         elseif sss.ps isa PowerSeries
-            sym = Symbol(string(sss.ps.seriesID) * string(sss.scalar_idx) * string(Num.(vI)))
+            sym = Symbol("$(sss.ps.seriesID)$(sss.scalar_idx)$vI")
             sym, = @variables $sym
-            sss.coefficients[vI] = SeriesCoefficient(sss.ps, sym, vI, getAllVariables(vI), sss.scalar_idx)
-        else
-            throw(ArgumentError("Cannot construct a SeriesCoefficient for a 
-                                 ScalarSeriesSymbol which doesn't refer to any known 
-                                 PowerSeries or :self"))
+            sss.coefficients[vI] = SeriesCoefficient(sss.ps, sym, vI, sss.scalar_idx)
         end
-        return sss.coefficients[vI]
+        sss.coefficients[vI]
     end
 end
 
 function Base.show(io::IO, sss::ScalarSeriesSymbol)
     if sss.ps == :self
         print(io, "ScalarSeriesSymbol refering to series :self at index ", sss.scalar_idx)
-    elseif isnothing(sss.ps )
-        print(io, "ScalarSeriesSymbol refering to unitialized series (nothing) at index ", sss.scalar_idx)
     else
         if sss.ps.order < 0
             print(io, "ScalarSeriesSymbol refering to series ", sss.ps.seriesID, ". No coefficients computed yet")
@@ -500,867 +435,377 @@ function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
 end
 
 
-
-
-#------------------------------------------------------------ExpandableFormula----------------------------------------------------
-"""
-    ExpandableFormula
-
-    ### Fields
-
-    - `efID::Symbol` -- A unique reference to the expandable formula which might be used
-      to create unique symbols when expanding the formula
-    - `sym::Num` -- A symbol that may represent the ExpandableFormula in a Symbolics
-      relation
-    - `unique_sym::Num` -- A unique symbol to represent the Expandable Formula in a 
-      Symbolics relation
-    - `formula::Num` -- The representation of the formula that must be expanded
-    - `fixed_indices::Vector` -- Indices that are present but are not used for expansion.
-      Might be either Num for abstract representation or Int for concrete representation
-    - `varying_indices::Vector{Num}` -- Indices on which to expand
-    - `varying_indices_ranges::Vector` -- The ranges between which varying indices should
-      be expanded. Can depend on Int, fixed_indices or varying_indices. Ranges should be
-      given as tuples (start, end) and order should correspond to the order of 
-      varying_indices vector. Furthermore, the numeric range of the varying index should
-      be deducible from the value of previous varying indices and fixed indices
-    - `expandable_formulae::Vector{ExpandableFormula}` -- Other expandable formulae that
-      may appear in the formula 
-    - `series_coeffs::Vector{SeriesCoefficient}` -- The series coefficients that appear in
-      the relation
-    - `func` -- A function that takes a vector of expressions that are instances of formula
-      in which the coefficients that depend on symbolical indices have been replaced by the
-      corresponding numerical values, and returns the single expanded expression that 
-      corresponds to the desired sym
-
-    ### Notes
-
-    Expandable formulae work in a tree like way, with expandable_formulae being the nodes
-    and series coefficients being the leaves.
-
-    ### Examples
-
-    - `ExpandableFormula(efID::Symbol
-                         sym::Num,
-                         formula::Num,
-                         fixed_indices::Vector,
-                         varying_indices::Vector{Num},
-                         varying_indices_ranges::Vector,
-                         expandable_formulae::Vector{ExpandableFormula},
-                         series_coeffs::Vector{SeriesCoefficient},
-                         func)` -- default constructor
-
+#--------------------------------------------Series defined by Partial Differential Equations----------------------------------------------
 
 """
-struct ExpandableFormula
-    efID::Symbol
-    sym::Num
-    unique_sym::Num
-    formula::Num
-    fixed_indices::Vector
-    varying_indices::Vector{Num}
-    varying_indices_ranges::Vector
-    expandable_formulae::Vector{ExpandableFormula}
-    series_coeffs::Vector{SeriesCoefficient}
+    getSymbolics(x)::Number
+
+    A function to retrieve the Symbolics representation of an object x. By default, assumes x isa
+    Number. Using this function, one gets the fully algebraic representation of x
+"""
+getSymbolics(x::Number)::Number = x
+getSymbolics(sc::SeriesCoefficient)::Number = sc.unique_sym
+
+"""
+    getNum(x)::Number
+
+    A function to return the Number representing an object x. By default, assumes x isa
+    Number. Using this function, objects that can be evaluated numerically are evaluated
+    numerically
+"""
+getNum(x::Number)::Number = x
+function getNum(sc::SeriesCoefficient)::Number
+    if sc.ps != :self
+        if sc.ps.order < sc.indices[1]
+            throw(ArgumentError("Cannot evaluate a SeriesCoefficient at order above the
+                                 currently computed order"))
+        else
+            sc.ps.coefficients[sc.index...][sc.indices...]
+        end
+    else
+        getSymbolics(sc)
+    end
+end
+
+
+############################ NlinearSeriesOperation ###########################
+"""
+    NlinearSeriesOperation
+
+    SymbolicSeries are constructed as trees of SymbolicSeries. branches of that tree can
+    be described as NlinearSeriesOperation. These operations correspond to the application
+    of a func over a Vector args of arguments that can be SymbolicSeries, Numbers, ...
+
+    ###Fiels
+
+    - `func` -- The function used to aggregate all the arguments. Should take a vector as 
+      input.
+    - `args::Vector` -- The Vector of arguments
+
+    ###Example
+
+    - `NlinearSeriesOperation(func, args::Vector)` -- default constructor
+"""
+struct NlinearSeriesOperation
     func
+    args::Vector
+end
+
+function Base.show(io::IO, op::NlinearSeriesOperation)
+    print(io, "NlinearSeriesOperation {$(op.func)}($args)")
 end
 
 """
-    function make_unique_sym(formula, scs::Vector{SeriesCoefficient}, 
-                             efe::Vector{ExpandableFormula})
+    getSymbolics(op::NlinearSeriesOperation)::Number
 
-    Replaces all symbols from the vectors scs and efe in the fomula by their unique symbolic
-    representation
-
-    ###Input
-
-    - `formula` -- The formula in which symbols must be replaced
-    - `scs::Vector{SeriesCoefficient}` -- All the series coefficient for which the symbolic
-      representation should be changed
-    - `efe::Vector{ExpandableFormula}` -- All the expandable formulae for which the symbolic
-      representation should be changed
-
-    ###Output
-
-    Updated formula
+    Returns the Symbolics.Num expression representing the NlinearSeriesOperation
+    Only works if op is an operation on SymbolicSeries coefficients.
 """
-function make_unique_sym(formula, scs::Vector, efe::Vector)
-    dsc = Dict([sc.sym=>sc.unique_sym for sc in scs])
-    def = Dict([ef.sym=>ef.unique_sym for ef in efe])
-    fsc = substitute(formula, dsc)
-    substitute(fsc, def)
-end
-
-function ExpandableFormula(efID::Symbol,
-                           sym::Num,
-                           formula::Num,
-                           fixed_indices::Vector,
-                           varying_indices::Vector{Num},
-                           varying_indices_ranges::Vector,
-                           expandable_formulae::Vector,
-                           series_coeffs::Vector,
-                           func)
-
-    
-    u_sym = Symbol(string(efID) * string(fixed_indices)) # unique id
-    u_sym, = @variables $u_sym
-
-    ExpandableFormula(efID,
-                      sym,
-                      u_sym,
-                      make_unique_sym(formula, series_coeffs, expandable_formulae), 
-                      fixed_indices,
-                      varying_indices,
-                      varying_indices_ranges,
-                      expandable_formulae,
-                      series_coeffs,
-                      func)
-end
-
-function Base.show(io::IO, ef::ExpandableFormula) 
-    
-    @variables x y z
-    func_expr = "[x, y, z] -> "*string(ef.func([x,y,z]))
-    ranges_expressions = ["$i in $(r[1]):$(r[2]), " for (i,r) in zip(ef.varying_indices, ef.varying_indices_ranges)]
-    print(io, "Expandable formula (", func_expr, ") applied to (", ef.formula, ") for ", ranges_expressions..., " with fixed ", string(ef.fixed_indices))
-
-end
-
-#------------------------------------------------------Expandable Formula macros------------------------------------------------------
-"""
-    get_ranges_expressions(ranges...)
-
-    Given a number of Expr describing ranges, returns two expressions that once evaluated
-    return respectively a vector of varying indices and the range they vary accross
-
-    ###Input
-
-    - `ranges...` -- multiple Expr of the form :(i in m:n)
-
-    ###Output
-
-    Two expressions : :([i, ...]) and :([(m,n), ...])
-"""
-function get_ranges_expressions(ranges...)
-    variable_indices = []
-    variable_indices_ranges = []
-    for r in ranges
-        push!(variable_indices, :($(esc(r.args[2]))))
-        push!(variable_indices_ranges, :($(esc(r.args[3].args[2])), $(esc(r.args[3].args[3]))))
-    end
-    variable_indices_expr = Expr(:vect, variable_indices...)
-    variable_indices_ranges_expr = Expr(:vect, variable_indices_ranges...)
-
-    variable_indices_expr, variable_indices_ranges_expr
-end
-
-expandable_formula_macro_shortcuts_symbols = [:expandable_formula, Symbol("@∑")]
-expandable_formula_macro_shortcuts_functions = Dict(Symbol("@∑") => v -> +(v...))
-
-_substitute_syms(x) = x
-_substitute_syms(x::SeriesCoefficient) = x.sym
-_substitute_syms(x::ExpandableFormula) = x.sym
-
-"""
-    expandable_formula(func, fixed_indices, expr, ranges...)
-
-    A macro used to create ExpandableFormula object in a more practical way.
-
-    ###Input
-
-    - `func` -- The function that will be given to the ExpandedFormula
-    - `fixed_indices` -- A Vector of the fixed indices that might appear in the formula
-    - `expr` -- The expression that appears in the ExpandableFormula. Can use Symbolics'
-      Num objects but also SeriesCoefficient and ExpdandableFormula objects
-    - `ranges...` -- The ranges for the varying indices. These must be specified as
-      i in 0:j for instance. Each index range must be deducible from the
-      indices ranges that come next (i.e i in 1:j j in 0:5 for instance)
-
-    ###Output
-
-    The corresponding ExpandableFormula
-"""
-macro expandable_formula(func, fixed_indices, expr, ranges...)
-
-    # Retrieve Expr that can be used to get ranges in the expected form for ExpandableFormula objects
-    variable_indices_expr, variable_indices_ranges_expr = get_ranges_expressions(ranges...)
-    
-    # merge with fixed indices so that it can be passed to inner macro calls
-    variable_indices_symbols = [r.args[2] for r in ranges]
-    inner_fixed_indices = Expr(:vect, fixed_indices.args..., variable_indices_symbols...)
-
-
-    # Retrieve formula, SeriesCoefficient Vector and ExpandableFormula Vector
-    ## Auxiliary function that applies to expr
-    function aux(node, fixed_indices)
-        if node isa Symbol
-            :(apply_all($node))
-        elseif node isa Expr
-            #handle nested macros
-            if node.head==:macrocall && node.args[1] in expandable_formula_macro_shortcuts_symbols
-                new_node = Expr(:macrocall, node.args[1], node.args[2], inner_fixed_indices, node.args[3:end]...)
-                :(apply_all($new_node))
-            else
-                new_args = [aux(arg, fixed_indices) for arg in node.args]
-                new_node = Expr(node.head, new_args...)
-                :(apply_all($new_node))
-            end
-        else
-            node
+function getSymbolics(op::NlinearSeriesOperation)::Number
+    to_aggregate = []
+    for arg in op.args
+        if arg isa ScalarSeriesSymbol
+            throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
+        else            
+            push!(to_aggregate, getSymbolics(arg))
         end
     end
-
-    formula_expr = aux(expr, fixed_indices)
-
-
-    quote
-        ## Define new variables and auxiliary functions
-        expandable_formulae = []
-        series_coeffs = []
-        push_expandable_formula_only(x) = (x isa ExpandableFormula && push!(expandable_formulae,x) ; x)
-        push_series_coefficient_only(x) = (x isa SeriesCoefficient && push!(series_coeffs, x) ; x)
-        apply_all = _substitute_syms ∘ push_expandable_formula_only ∘ push_series_coefficient_only
-
-        formula = $formula_expr
-        varying_indices = $variable_indices_expr
-        varying_indices_ranges = $variable_indices_ranges_expr
-        
-        sym = Symbol("ExpandableFormula{"*string(formula)*" of "*string($fixed_indices)*" for "*string(varying_indices)*" in "*string(varying_indices_ranges)*"}")
-        num_sym, = Symbolics.variables(sym)
-
-        ExpandableFormula(sym, num_sym, formula, $fixed_indices, reverse($variable_indices_expr), 
-                          reverse($variable_indices_ranges_expr), expandable_formulae, series_coeffs, $func)
-
-    end
-
-
+    op.func(to_aggregate)
 end
 
 
-"""
-    ∑(fixed_indices, expr, ranges...)
-
-    A shortcut to @expandable_formula that can be used for convenience. Corresponds to 
-    @expandable_formula with the function v -> +(v...) as the first argument
-"""
-macro ∑(fixed_indices, expr, ranges...)
-    :(@expandable_formula expandable_formula_macro_shortcuts_functions[Symbol("@∑")] $fixed_indices $expr $(ranges...))
-end
-
-
-#---------------------------------------------------------RecurrentRelation----------------------------------------------------------------
 
 """
-    substitute_known(formula, coeffs::Vector{SeriesCoefficient})
+    getNum(op::NlinearSeriesOperation)::Number
 
-    Substitute all coefficients from the Vector coeffs in the formula by their value and
-    returns the unknown coefficients of the Vector
+    Returns the Symbolics.Num expression representing the NlinearSeriesOperation
+    Only works if op is an operation on SymbolicSeries coefficients.
 
-    ###Input
-
-    - `formula` -- The formula in which to replace the coefficients
-    - `coeffs::Vector{SeriesCoefficient}` -- The series coefficients to replace
-
-    ###Output
-
-    - `result` -- The resulting formula
-    - `unknowns::Vector{SeriesCoefficient}` -- The remaining unknown coefficients
+    Using this function, objects that can be evaluated numerically are evaluated 
+    numerically
 """
-function substitute_known(formula, coeffs::Vector{SeriesCoefficient})
-    d = Dict()
-    unknowns = []
-    for coeff in coeffs
-        if coeff.ps != :self
-
-            d[coeff.unique_sym] = getValue(coeff, Int[])
-
-        else
-            push!(unknowns, coeff)
+function getNum(op::NlinearSeriesOperation)::Number
+    to_aggregate = []
+    for arg in op.args
+        if arg isa ScalarSeriesSymbol
+            throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
+        else            
+            push!(to_aggregate, getSymbolics(arg))
         end
     end
-    return substitute(formula, d), unknowns
+    op.func(to_aggregate)
+end
+
+
+################################## MultilinearSeriesOperation ##############################
+"""
+    MultilinearSeriesOperation
+
+    SymbolicSeries are constructed as trees of SymbolicSeries. branches of that tree can
+    be described as MultilinearSeriesOperation. These operations correspond to the
+    the application of a func over a range of arguments that is not necesarily defined at
+    the time of the construction of the tree. Typical use are the construction of 
+    ExpandableFormula from the AlgebraicPowerSeries module
+
+    ###Fiels
+
+    - `func` -- The function used to aggregate all the arguments. Should take a vector as
+      input
+    - `arg` -- A function that returns the arguments to be used when called on a number of
+      indices xᵢ.
+    - `arg_parameters::Vector` -- parameters to be passed to the arg function. If not
+      empty, arg should accept a named parameter params.
+    - `ranges::Vector{Tuple{Any, Any}}` -- The ranges between which the indices vary. i.e :
+      xᵢ ∈ aᵢ:bᵢ where ranges = [(aᵢ, bᵢ)...]
+
+    ###Example
+
+    - `MultilinearSeriesOperation(func, 
+                                  arg, 
+                                  arg_parameters::Vector
+                                  ranges::Vector{Tuple{Any, Any}})` -- default constructor
+    - `MultilinearSeriesOperation(func, 
+                                  arg,
+                                  ranges::Vector{Tuple{Any, Any}})` -- constructor for 
+      MultilinearSeriesOperation with empty arg_parameters
+"""
+struct MultilinearSeriesOperation
+    func
+    arg
+    arg_parameters::Vector
+    ranges::Vector{Tuple{Any, Any}}
+end
+
+MultilinearSeriesOperation(func, arg, ranges::Vector{Tuple{Any, Any}}) = 
+    MultilinearSeriesOperation(func, arg, [], ranges)
+
+function Base.show(io::IO, op::MultilinearSeriesOperation)
+    indices = ["i_$i, " for i in 1:length(op.ranges)]
+    ranges_str = ["i_$i in $(r[1]):$(r[2]), " for (i,r) in enumerate(op.ranges)]
+    print(io, "MultilinearSeriesOperation{$(op.func)}(arg($(indices...); params=$(op.arg_parameters)) for $(ranges_str...))")
 end
 
 """
-    RecurrentRelation
+    getSymbolics(op::MultilinearSeriesOperation)::Number
+
+    Returns the Symbolics.Num expression representing the MultilinearSeriesOperation.
+    Only works if op is an operation on SymblicSeries coefficients.
+"""
+function getSymbolics(op::MultilinearSeriesOperation)::Number
+    to_aggregate = []
+    rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
+    if isempty(op.arg_parameters)
+        foreach(x -> push!(to_aggregate, getSymbolics(op.arg(Tuple(x)...))), rngs)
+    else
+        foreach(x -> push!(to_aggregate, 
+                           getSymbolics(op.arg(Tuple(x)...; params=op.arg_parameters))),
+                rngs)
+    end
+    op.func(to_aggregate)
+end
+
+"""
+    getNum(op::MultilinearSeriesOperation)::Number
+
+    Returns the Symbolics.Num expression representing the MultilinearSeriesOperation.
+    Only works if op is an operation on SymblicSeries coefficients.
+
+    Using this function, objects that can be evaluated numerically are evaluated 
+    numerically
+"""
+function getNum(op::MultilinearSeriesOperation)::Number
+    to_aggregate = []
+    rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
+    if isempty(op.arg_parameters)
+        foreach(x -> push!(to_aggregate, getSymbolics(op.arg(Tuple(x)...))), rngs)
+    else
+        foreach(x -> push!(to_aggregate, 
+                           getSymbolics(op.arg(Tuple(x)...; params=op.arg_parameters))),
+                rngs)
+    end
+    op.func(to_aggregate)
+end
+
+##################################### SymbolicSeries #####################################
+"""
+    SymbolicSeries{D}
+
+    A representation of a series of D variables : ∑aᵢⱼₖxⁱyʲzᵏ for a 3 variables series.
+    Throughout the tree of SymbolicSeries, the indices of the current node can be referred
+    to as :idx1, :idx2, ..., :idxD.
+
+    WARNING : The indexation convention is different from the convention used before.
+              Indeed, to decide up to which order a series coefficient should be computed,
+              it is easier to write them as a₀₀ + a₁₀ x + a₁₁ y + a₂₀ x² + ...
+              However, operations between series if often easier to describe when 
+              coefficients are written as ∑aᵢⱼₖxⁱyʲzᵏ. Thus, for SymbolicSeries (which are
+              NOT a subtype of PowerSeries), this convention is adopted
 
     ### Fields
 
-    - `relation::Equation` -- The representation of the relation
-    - `indices::Vector{Num}` -- The indices that appear in the relation 
-    - `indices_ranges::Vector{Tuple{Union{Num, Int, Symbol}, Union{Num, Int, Symbol}}}` -- 
-      The range of the indices for which the relation is valid. The numerical range of one
-      index must be deducible from the previous indices in the list. To denote +∞, use :∞ 
-    - `series_coeffs::Vector{SeriesCoefficient}` -- The series coefficients that appear in 
-      the relation
-    - `expandable_formulae::Vector{ExpandableFormula}` -- The expandable formulae that may
-      appear in the relation
+    - `ref::Union{ScalarSeriesSymbol, 
+                  NlinearSeriesOperation,
+                  MultilinearSeriesOperation}` -- How are each coefficients defined.
+      SymbolicSeries are represented as trees where SymbolicSeries are the nodes, 
+      NlinearSeriesOperation and MultilinearSeriesOperation are the branches,
+      and ScalarSeriesSymbol are the leaves (leaves may also be other objects such as 
+      Numbers)
+    - `center::Vector` -- A vector of length D which represents the center around which
+      the series should be computed when needed
 
     ### Examples
 
-    - `RecurrentRelation(relation::Num,
-                         indices::Vector{Num}
-                         indices_ranges::Vector{Tuple{Union{Num, Int, Symbol}, 
-                                                      Union{Num, Int, Symbol}}},
-                         series_coeffs::Vector{SeriesCoefficient},
-                         expandable_formulae::Vector{ExpandableFormula})` -- default constructor
-
-
-"""
-struct RecurrentRelation
-    relation::Equation
-    indices::Vector{Num}
-    indices_ranges::Vector{Tuple{Union{Num, Int, Symbol}, Union{Num, Int, Symbol}}}
-    series_coeffs::Vector{SeriesCoefficient}
-    expandable_formulae::Vector{ExpandableFormula}
-
-    function RecurrentRelation(relation::Equation,
-                               indices::Vector{Num},
-                               indices_ranges::Vector,
-                               series_coeffs::Vector,
-                               expandable_formulae::Vector) 
-        new(make_unique_sym(relation, series_coeffs, expandable_formulae),
-            indices,
-            indices_ranges,
-            series_coeffs,
-            expandable_formulae
-        )
-    end
-end
-
-function Base.show(io::IO, rr::RecurrentRelation)
-    ranges_expressions = ["$i in $(r[1]):$(r[2]), " for (i,r) in zip(rr.indices, rr.indices_ranges)]
-    print(io, "RecurrentRelation ", rr.relation, " for ", ranges_expressions...)
-end
-
-
+    - `SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
+                                 NlinearSeriesOperation, 
+                                 MultilinearSeriesOperation}, 
+                      center::Vector)` -- default constructor
+    - `SymbolicSeries(a::Array{ScalarSeriesSymbol}, center::Vector)::Array{SymbolicSeries}` 
+      -- A constructor to easily create an array of SymbolicSeries{D} around the same 
+      center
+    - `SymbolicSeries(ps::PowerSeries)` -- A constructor to create a SymbolicSeries or an
+      array of SymbolicSeries from a PowerSeries. If PowerSeries is scalar, then returns
+      a SymbolicSeries. Otherwise returns an Array of SymbolicSeries. Center will then be 
+      the center of the PowerSeries.
 
 """
-    recurrent_relation(rel, ranges...)
-
-    A macro used to create RecurrentRelation objects in a more practical way.
-
-    ###Input
-
-    - `rel` -- The relation to parse to a recurrent_relation. Can use Symbolics'
-      Num objects but also SeriesCoefficient and ExpandableFormula objects
-    - `ranges...` -- The ranges for the indices. These must be specified as
-      i in 0:j for instance. Each range must be numerically deducible from the
-      ranges that come afterwards. For isntance i in 0:j j in k:l k in 0:(:∞) l in 0:4
-
-    ###Output
-
-    The corresponding ExpandableFormula
-"""
-macro recurrent_relation(rel, ranges...)
-
-    # Retrieve Expr that can be used to get ranges in the expected form for ExpandableFormula objects
-    indices_expr, indices_ranges_expr = get_ranges_expressions(ranges...)
-    
-    # merge with fixed indices so that it can be passed to inner macro calls
-    indices_symbols = [r.args[2] for r in ranges]
-    inner_indices = Expr(:vect, indices_symbols...)
-
-
-    # Retrieve formula, SeriesCoefficient Vector and ExpandableFormula Vector
-    ## Auxiliary function that applies to expr
-    function aux(node)
-        if node isa Symbol
-            :(apply_all($node))
-        elseif node isa Expr
-            #handle nested macros
-            if node.head==:macrocall && node.args[1] in expandable_formula_macro_shortcuts_symbols
-                new_node = Expr(:macrocall, node.args[1], node.args[2], inner_indices, node.args[3:end]...)
-                :(apply_all($new_node))
-            else
-                new_args = [aux(arg) for arg in node.args]
-                new_node = Expr(node.head, new_args...)
-                :(apply_all($new_node))
-            end
-        else
-            node
-        end
-    end
-
-    relation_expr = aux(rel)
-
-
-    quote
-        ## Define new variables and auxiliary functions
-        expandable_formulae = []
-        series_coeffs = []
-        push_expandable_formula_only(x) = (x isa ExpandableFormula && push!(expandable_formulae,x) ; x)
-        push_series_coefficient_only(x) = (x isa SeriesCoefficient && push!(series_coeffs, x) ; x)
-        apply_all = _substitute_syms ∘ push_expandable_formula_only ∘ push_series_coefficient_only
-
-        relation = $relation_expr
-        indices = $indices_expr
-        indices_ranges = $indices_ranges_expr
-
-        RecurrentRelation(relation, reverse(indices), reverse(indices_ranges), series_coeffs, expandable_formulae)
-
-    end
-
-end
-
-#---------------------------------------------------------------RecurrentSeries---------------------------------------------------------
-
-"""
-    RecurrentSeries{T,D} <: PowerSeries{T,D}
-
-    A concrete type representing a series defined by a **linear** relation of recurrence
-    around a center c
-
-    ### Fields
-
-    - `seriesID::Symbol` -- A unique reference to the series that might be used to choose
-      unique IDs for SeriesCoefficient
-    - `size::NTuple{D,Int}` -- size of the series (similar to Array)
-    - `variables::Vector{Num}` -- The series variables, for instance x in Σaᵢxⁱ
-    - `center::Vector` -- The series center, i.e c in Σaᵢ(x-c)ⁱ
-    - `coefficients::Array{Vector{T},D}` -- The series coefficients
-    - `order::Int` -- The order to which coefficients were already computed (-1 means none)
-    - `scalar_series_ref::Array{AbstractScalarSeriesSymbol, D}` -- An array of 
-      AbstractScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
-
-    relations::Vector{RecurrentRelation} -- A number of relations that allows to compute
-      the coefficients numerically
-
-
-    ### Notes 
-
-    ### Examples
-
-    - `RecurrentSeries(seriesID::Symbol,
-                         size::NTuple{D,Int},
-                         variables::Vector{Num},
-                         center::Vector,
-                         relations::Vector{RecurrentRelation})` -- default constructor
-"""
-mutable struct RecurrentSeries{T,D} <: PowerSeries{T,D}
-
-    seriesID::Symbol
-    size::NTuple{D,Int}
-    variables::Vector{Num}
+struct SymbolicSeries{D}
+    ref::Union{ScalarSeriesSymbol, NlinearSeriesOperation, MultilinearSeriesOperation}
     center::Vector
-    coefficients::Array{Vector{T},D}
-    order::Int
-    scalar_series_ref::Array{ScalarSeriesSymbol, D}
-    
 
+    SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
+                              NlinearSeriesOperation,
+                              MultilinearSeriesOperation},
+                   center::Vector) = new{length(center)}(ref, center)
+end
 
-    relations::Vector{RecurrentRelation}
+function SymbolicSeries(a::Array{ScalarSeriesSymbol}, 
+                        center::Vector)::Array{SymbolicSeries}
+    map(sss -> SymbolicSeries(sss, center), a)
+end
 
-    function RecurrentSeries{T,D}(seriesID::Symbol,
-                         size::NTuple{D,Int},
-                         variables::Vector{Num},
-                         center::Vector,
-                         coefficients::Array{Vector{T},D},
-                         order::Int,
-                         scalar_series_ref::Array{ScalarSeriesSymbol, D},
-                         relations::Vector{RecurrentRelation}) where {T,D}
-        rs = new(seriesID,
-                 size,
-                 variables,
-                 center,
-                 coefficients,
-                 order,
-                 scalar_series_ref,
-                 relations)
-        for sss in scalar_series_ref
-            sss.ps = rs
+function SymbolicSeries(ps::PowerSeries)
+    a = ps.scalar_series_ref
+    length(a) == 1 ? SymbolicSeries(a[1], ps.center) : SymbolicSeries(a, ps.center)
+end
+
+function Base.show(io::IO, s::SymbolicSeries)
+    if s.ref isa ScalarSeriesSymbol
+        if s.ref.ps isa PowerSeries
+            print(io, "$(s.ref.ps.seriesID)[$(s.ref.scalar_idx)]")
+        else 
+            print(io, "$(s.ref.ps)[$(s.ref.scalar_idx)]")
         end
-        return rs
-    end
-end
-
-function RecurrentSeries{T}(seriesID::Symbol,
-                            size::NTuple{D,Int},
-                            variables::Vector{Num},
-                            center::Vector,
-                            relations::Vector{RecurrentRelation}) where {T,D}
-    coefficients = Array{Vector{T},D}(undef, size)
-    for i in eachindex(coefficients)
-        coefficients[i] = []
-    end
-    scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, tuple(idx), Dict()), keys(coefficients))
-    RecurrentSeries{T,D}(seriesID, size, variables, center, coefficients, -1, 
-                         scalar_series_ref, relations)
-end
-
-"""
-    function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict,
-        N::Union{Int,Nothing}=nothing, ps::Union{RecurrentSeries, Nothing}=nothing)
-
-    Given a dictionary that associates indices of the coefficient c to some other value,
-    substitutes in c indices_expr and indices and returns the new corresponding 
-    SeriesCoefficient
-
-    ###Input
-
-    - `c::SeriesCoefficient` -- The SeriesCoefficient the substitution should be applied to
-    - `subst::Dict` -- The substitution dictionnary
-    - `N::Union{Int,Nothing}=nothing` -- If provided as well as ps, if the first index of
-      the series coefficient is numerical and strictly less than N, then the returned 
-      coefficient should relate to series ps instead of :self
-    - `ps::Union{RecurrentSeries, Nothing}=nothing`
-
-    ###Output
-
-    The new SeriesCoefficient obtained
-"""
-function substitute_coeff_indices(c::SeriesCoefficient, subst::Dict, 
-        N::Union{Int,Nothing}=nothing, ps::Union{RecurrentSeries, Nothing}=nothing)
-    
-    new_idc_expr = Num[]
-    for idx_expr in c.indices_expr
-        push!(new_idc_expr, substitute(idx_expr, subst))
-    end
-
-    new_idc = Num[]
-    for idx in c.indices
-        push!(new_idc, substitute(idx, subst))
-    end
-
-    if (!isnothing(N) && !isnothing(ps) 
-        && (c.ps == :self)
-        && isempty(Symbolics.get_variables(new_idc_expr[1])) 
-        && (new_idc_expr[1] < N)
-       )
-        SeriesCoefficient(ps, c.unique_sym, new_idc_expr, new_idc, c.index)
     else
-        SeriesCoefficient(c.ps, c.unique_sym, new_idc_expr, new_idc, c.index)
+        print(io, s.ref)
     end
-
 end
 
 """
-    substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict,
-                                   N::Int, ps::RecurrentSeries)
+    Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}) where D
 
-    Replaces all occurences of the given fixed indices in ef and return the new 
-    corresponding ExpandableFormula
-
-    #Input
-
-    - `ef::ExpandableFormula` -- The ExpandableFormula to which the substitution must be
-      applied
-    - `fixed_indices_values::Dict` -- The index=>value substitution dictionary
-    - `N::Int` -- The order to which the RecurrentSeries is being expanded
-    - `ps::RecurrentSeries` -- The RecurrentSeries that is being expanded
-
-    #Output
-
-    An ExpandableFormula with the subtituted indices
-
+    Returns a tree corresponding to the expression of the coefficient of s that has index
+    args. This time, the nodes of the tree are NlinearSeriesOperations and 
+    MultilinearSeriesOperations while the leaves are SeriesCoefficients.
 """
-function substitute_fixed_indices_in_ef(ef::ExpandableFormula, fixed_indices_values::Dict,
-                                        N::Int, ps::RecurrentSeries)
-    # efID::Symbol => same                                                           ✓
-    # sym::Num, => same                                                              ✓
-    # formula::Num, => substituted (indices, coeffs and efe)                         ✓
-    # fixed_indices::Vector, => substituted (indices)                                ✓
-    # varying_indices::Vector{Num},                                                  ✓
-    # varying_indices_ranges::Vector, => substituted (indices)                       ✓
-    # expandable_formulae::Vector{ExpandableFormula}, => substituted (indices, rec)  ✓
-    # series_coeffs::Vector{SeriesCoefficient}, => substituted (indices)             ✓
-    # func => same                                                                   ✓
-
-    new_fixed_indices = substitute_in_vector(ef.fixed_indices, fixed_indices_values)
-    new_varying_indices_ranges = substitute_in_pairs_vector(ef.varying_indices_ranges, fixed_indices_values)
-    new_series_coeffs = [substitute_coeff_indices(c, fixed_indices_values, N, ps) for c in ef.series_coeffs]
-    new_expandable_formulae = [substitute_fixed_indices_in_ef(_ef, fixed_indices_values, N, ps) for _ef in ef.expandable_formulae]
-
-    subst_dict = copy(fixed_indices_values)
-    for (new_c, c) in zip(new_series_coeffs, ef.series_coeffs)
-        subst_dict[c.unique_sym] = new_c.unique_sym
-    end
-    for (new_ef, ef) in zip(new_expandable_formulae, ef.expandable_formulae)
-        subst_dict[ef.unique_sym] = new_ef.unique_sym
-    end
-
-    new_formula = substitute(ef.formula, subst_dict)
-
-    ExpandableFormula(ef.efID, ef.sym, new_formula, new_fixed_indices, ef.varying_indices, 
-                      new_varying_indices_ranges, new_expandable_formulae, 
-                      new_series_coeffs, ef.func)
-end
-
-"""
-    expand(ef::ExpandableFormula, indices_values::Dict, N::Int, ps::RecurrentSeries)
-
-    Expands an ExpandableFormula to a single formula (instance of Num)
-
-    ###Input
-
-    - `ef::ExpandableFormula` -- The formula to expand
-    - `fixed_indices_values::Dict` -- Fixed values that must be attributed to fixed
-      indices before expanding. All other indices values must be deducible from these ones
-    - `N::Int` -- The order to which the RecurrentSeries is being expanded
-    - `ps::RecurrentSeries` -- The RecurrentSeries from which this expandable formula is 
-      issued
-
-    ###Output
-
-    An instance of Num representing the expanded formula, and a Vector of unknown variables
-    that appear in it
-"""
-function expand(ef::ExpandableFormula, fixed_indices_values::Dict, N::Int, ps::RecurrentSeries)
-
-    if isempty(ef.varying_indices) # all indices values are stored in fixed_indices_values
-        
-        new_ef = substitute_fixed_indices_in_ef(ef, fixed_indices_values, N, ps)
-        res_formula, res_unknowns = substitute_known(new_ef.formula, new_ef.series_coeffs)
-        
-        if isempty(new_ef.expandable_formulae)
-            
-            return res_formula, getUniqueSym.(res_unknowns)
-        
-        else
-
-            fully_expanded_formulae, fully_expanded_unknowns = Num[], getUniqueSym.(res_unknowns)
-            for to_expand in new_ef.expandable_formulae
-                to_expand_formula, to_expand_unknowns = expand(to_expand, Dict(), N, ps)
-                expanded_formula = substitute(res_formula, Dict(to_expand.unique_sym=>
-                                                                      to_expand_formula))
-                push!(fully_expanded_formulae, expanded_formula)
-                fully_expanded_unknowns = [fully_expanded_unknowns;to_expand_unknowns]
+function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}) where D
+    if s.ref isa ScalarSeriesSymbol
+        s.ref[convertIndices_fullsym_to_trunc(args...)...]
+    elseif s.ref isa NlinearSeriesOperation
+        idx_subst = Dict([Symbol("idx$i") => v for (i,v) in enumerate(args)])
+        function substitution1(arg) 
+            if arg isa ScalarSeriesSymbol 
+                arg(args...) 
+            elseif arg in keys(idx_subst)
+                idx_subst[arg]
+            else
+                arg
             end
-            fully_expanded_formula = ef.func(fully_expanded_formulae)
-
-            return fully_expanded_formula, fully_expanded_unknowns
-
         end
-
-    else # varying indices must be treated
-
-        # compute the range of the first varying index
-        a = Symbolics.value(substitute(ef.varying_indices_ranges[1][1], fixed_indices_values))
-        b = Symbolics.value(substitute(ef.varying_indices_ranges[1][2], fixed_indices_values))
-
-        # compute all the sub-ExpandableFormulae
-        fully_expanded_formulae, fully_expanded_unknowns = Num[], Num[]
-        for i in a:b 
-            new_fixed_indices = copy(ef.fixed_indices)
-            new_varying_indices = ef.varying_indices[2:end]
-            new_varying_indices_ranges = ef.varying_indices_ranges[2:end]
-            new_fixed_indices_values = copy(fixed_indices_values)
-            new_fixed_indices_values[ef.varying_indices[1]] = i
-
-            to_expand = ExpandableFormula(ef.efID, ef.sym, ef.formula, new_fixed_indices,
-                                          new_varying_indices, new_varying_indices_ranges, 
-                                          ef.expandable_formulae, ef.series_coeffs, ef.func)
-
-            to_expand_formula, to_expand_unknowns = expand(to_expand, new_fixed_indices_values, N, ps)
-            push!(fully_expanded_formulae, to_expand_formula)
-            fully_expanded_unknowns = [fully_expanded_unknowns; to_expand_unknowns]
-        end
-
-        return ef.func(fully_expanded_formulae), fully_expanded_unknowns
-
+        NlinearSeriesOperation(s.ref.func, map(substitution1, s.ref.args))
+    else #s.ref isa MultilinearSeriesOperation
+        idx_subst = Dict([Symbol("idx$i") => v for (i,v) in enumerate(args)])
+        substitution2(x) = x in keys(idx_subst) ? idx_subst[x] : x
+        substitution3(t) = (substitution2(t[1]), substitution2(t[2]))
+        MultilinearSeriesOperation(s.ref.func, 
+                                   s.ref.arg, 
+                                   substitution2.(s.ref.arg_parameters), 
+                                   substitution3.(s.ref.ranges))
     end
-
 end
 
-"""
-    function iterate_expand(truncated_rr::RecurrentRelation, N::Int, ps::RecurrentSeries, 
-                            fixed_values::Dict=Dict(), k::Int=1)
 
-    Expands a recurrent relations over its indices
+"""
+    getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D
+
+    Returns the Symbolics expression of the coefficient of s at index idx
 
     ###Input
 
-    - `truncated_rr::RecurrentRelation` -- A recurrent relation with **finite** ranges
-    - `N::Int` -- order at which the relation is currently being expanded. Is used to
-      replace coefficients of lesser order with their values
-    - `ps::RecurrentSeries` -- The RecurrentSeries from which the relation is being 
-      expanded
-    - `fixed_values::Dict=Dict()` -- A dictionary indicating what are the fixed indices
-      inside the RecurrentRelation and what are their values
-    - `k::Int=1` -- Internal variables used for recursion
-
+    - `s::SymbolicSeries{D}` -- A D-variables SymbolicSeries
+    - `idx::Vararg{Int, D}` -- The index of the coefficient for which Symbolics expression
+      should be computed
 
     ###Output
 
-    - `equations::Vector{Equation}` -- see expand(rr::RecurrentRelation, N::Int)
-    - `unknowns::Vector{Num}` -- see expand(rr::RecurrentRelation, N::Int)
+    The expression of the coefficient of s at index idx
+
+    ###Note
+
+    This is equivalent to getSymbolics(s[idx])
 """
-function iterate_expand(rr::RecurrentRelation, N::Int, 
-                        ps::RecurrentSeries, fixed_values::Dict=Dict(), k::Int=1)
+getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s[idx...])
 
-    if isempty(rr.indices_ranges) # each index is determined by the fixed_values dict
-        
-
-        # Substitute indices
-        subst_dict = copy(fixed_values)
-
-        # Substitute coefficients
-        unknowns = SeriesCoefficient[]
-        for c in rr.series_coeffs
-            new_sc = substitute_coeff_indices(c, fixed_values, N, ps)
-            push!(unknowns, new_sc)
-            subst_dict[c.unique_sym] = new_sc.unique_sym
-        end
-        res_relation = substitute(rr.relation, subst_dict)
-        res_relation, unknowns = substitute_known(res_relation, unknowns)
-        res_unknowns = getUniqueSym.(unknowns)
-
-        # Substitute expandable formulae
-        for ef in rr.expandable_formulae
-            expanded_ef_formula, new_unknowns = expand(ef, fixed_values, N, ps)
-            res_unknowns = [res_unknowns; new_unknowns]
-            subst_dict[ef.unique_sym] = expanded_ef_formula
-        end
-
-        res_relation = substitute(res_relation, subst_dict)
-
-        res_unknowns
-        return [res_relation], res_unknowns
-
-    else
-
-        all_equations, all_unknowns = Equation[], Num[]
-        rg = rr.indices_ranges[1] # first range should be deducible from fixed_values
-        for i in Symbolics.value(substitute(rg[1], fixed_values)):Symbolics.value(
-                 substitute(rg[2], fixed_values))
-            new_indices_ranges = rr.indices_ranges[2:end]
-            new_fixed_values = copy(fixed_values)
-            new_fixed_values[rr.indices[k]] = i
-
-            new_rr = RecurrentRelation(rr.relation, rr.indices, new_indices_ranges, 
-                                       rr.series_coeffs, rr.expandable_formulae)
-            
-            equations, unknowns = iterate_expand(new_rr, N, ps, new_fixed_values, k+1)
-            all_equations = [all_equations;equations]
-            all_unknowns = [all_unknowns;unknowns]
-        end
-
-        return all_equations, all_unknowns
-
-    end
-
-end
 
 """
-    function expand(rr::RecurrentRelation, N::int, ps::RecurrentSeries)
-    
-    Expands the recurrent relation for all possible indices (:∞ is replaced by N)
+    getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D
+
+    Returns the Symbolics expression of the coefficient of s at index idx. Terms that can be
+    evaluated numerically are evaluated numerically.
 
     ###Input
-    
-    - `rr::RecurrentRelation` -- A relation of recurrence
-    - `N::Int` -- The order up to which the relation should be expanded
-    - `ps::RecurrentSeries` -- The series from which the relation is issued 
+
+    - `s::SymbolicSeries{D}` -- A D-variables SymbolicSeries
+    - `idx::Vararg{Int, D}` -- The index of the coefficient for which Symbolics expression
+      should be computed
 
     ###Output
 
-    - `equations::Vector{Equation}` -- A vector of equations
-    - `unknowns::Vector{Num}` -- The unknown variables that appear in these equations 
+    The expression of the coefficient of s at index idx
 
+    ###Note
+
+    This is equivalent to getNum(s[idx])
 """
-function expand(rr::RecurrentRelation, N::Int, ps::RecurrentSeries)
+getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s[idx...])
 
-    new_indices_ranges = NTuple{2, Union{Int, Num}}[]
-    for index_range in rr.indices_ranges
-        if index_range[2] == :∞
-            push!(new_indices_ranges, (max(N, index_range[1]),N))
-        else
-            push!(new_indices_ranges, index_range)
-        end
-    end
-
-
-    # Truncate
-    truncated_rr = RecurrentRelation(rr.relation,
-                                     rr.indices,
-                                     new_indices_ranges,
-                                     rr.series_coeffs,
-                                     rr.expandable_formulae
-    )
-
-    # Expand the truncated relation
-    iterate_expand(truncated_rr, N, ps)
+function Base.:+(s1::SymbolicSeries, s2::SymbolicSeries)
+    s1.center != s2.center && throw(ArgumentError("Can only add SymbolicSeries that have the
+                                                   same centers"))
+    op = NlinearSeriesOperation(Base.:+, [s1, s2])
+    SymbolicSeries(op, s1.center)
 end
 
-"""
-    compute_coefficients!(ps::RecurrentSeries, N::Int)
+function Base.:-(s1::SymbolicSeries, s2::SymbolicSeries)
+    s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the
+                                                   same centers"))
+    op = NlinearSeriesOperation(Base.:-, [s1, s2])
+    SymbolicSeries(op, s1.center)
+end
 
-    Computes the coefficients of a RecurrentSeries up to order N
+function Base.:*(t::Number, s::SymbolicSeries)
+    op = NlinearSeriesOperation(Base.:*, [t, s])
+    SymbolicSeries(op, s.center)
+end
+Base.:*(s::SymbolicSeries, t::Number) = t*s
 
-    ###Input 
-    
-    - `ps::RecurrentSeries` -- a RecurrentSeries
-    - `N::Int` -- The order up to which coefficients should be computed
-    - `verbose=0` -- named argument. If set to 1, indicates when a new order is 
-      being computed and when it is done in the console. If set to 2 or more, shows the
-      expanded equations and unknowns in addition to the order being computed.
-      If set to 3 or more, shows the value associated with each unknown.
+function Base.:/(s::SymbolicSeries, t::Number)
+    op = NlinearSeriesOperation(Base.:/, [s, t])
+    SymbolicSeries(op, s.center)
+end
 
-    ###Output
-
-    Nothing
-"""
-function compute_coefficients!(ps::RecurrentSeries{T,D}, N::Int; verbose=0) where {T,D}
-
-    if ps.order ≥ N 
-        return
-    end
-    
-    if ps.order < N-1
-        compute_coefficients!(ps, N-1; verbose=verbose)
-    end
-    
-    verbose >= 1 && println("Computing coefficients of order $N")
-    # compute for order N
-    # Expand all equations
-    equations, unknowns = Equation[], Num[]
-    for rr in ps.relations
-        new_equations, new_unknowns = expand(rr, N, ps)
-        equations = [equations; new_equations]
-        unknowns = [unknowns; new_unknowns]
-    end
-    unknowns = unique(unknowns)
-
-    if verbose >= 2
-        println()
-        println("EQUATIONS for order $N :")
-        for equation in equations
-            println(equation)
-        end
-        println("unknowns for order $N :")
-        println(unknowns)
-        println()
-    end
-
-    # solve for coefficients
-    unsorted_coeffs = symbolic_linear_solve(equations, unknowns)
-    if verbose >= 3
-        println("computed coefficients : ")
-        for (uk, val) in zip(unknowns, unsorted_coeffs)
-            print(uk)
-            print(" => ")
-            print(val)
-            println(", ")
-        end
-        println()
-    end
-    unsorted_coeffs = Symbolics.value.(unsorted_coeffs)
-
-    # set series coefficients
-    unknowns_idx = decode_coeffIndexAndIndices.(unknowns)
-    ## find maximum series coefficient index
-    max_idx = maximum(t -> t[2], unknowns_idx)
-    ## set ps.coefficients to the correct dimensions
-    for i in eachindex(ps.coefficients)
-            old_length = length(ps.coefficients[i])
-            new_spaces = Vector{T}(undef, max_idx-old_length)
-            ps.coefficients[i] = [ps.coefficients[i];new_spaces] # concatenation => copy so its not all the same vector ✓
-    end
-    ## fill
-    for (idx, val) in zip(unknowns_idx, unsorted_coeffs) 
-        ps.coefficients[idx[1]...][idx[2]] = val
-    end
-    ps.order += 1
-
-    verbose >= 1 && println("Coefficients computed up to order $N")
-    return
+function Base.:*(s1::SymbolicSeries{1}, s2::SymbolicSeries{1})
+    s1.center != s2.center && throw(ArgumentError("Can only multiply SymbolicSeries that have the same centers"))
+    arg(j; params::Vector) = NlinearSeriesOperation(v -> v[1]*v[2], [s1[j], s2[params[1]-j]])
+    op = MultilinearSeriesOperation(x -> Base.:+(x...), arg, [:idx1], [(0,:idx1)])
+    SymbolicSeries(op, s1.center)
 end
