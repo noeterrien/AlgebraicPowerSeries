@@ -255,7 +255,7 @@ Base.getindex(ps::AbstractPowerSeries{D}, I::Vararg{Int64, D}) where D = ps.scal
     then saved in the ScalarSeriesSymbol to be accessible at any time
 """
 function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg{Int})
-    vI = Vector([I...])
+    vI = [I...]
     if vI ∈ keys(sss.coefficients)
         sss.coefficients[vI]
     else
@@ -460,7 +460,7 @@ function getNum(sc::SeriesCoefficient)::Number
             throw(ArgumentError("Cannot evaluate a SeriesCoefficient at order above the
                                  currently computed order"))
         else
-            sc.ps.coefficients[sc.index...][sc.indices...]
+            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
         end
     else
         getSymbolics(sc)
@@ -492,7 +492,7 @@ struct NlinearSeriesOperation
 end
 
 function Base.show(io::IO, op::NlinearSeriesOperation)
-    print(io, "NlinearSeriesOperation {$(op.func)}($args)")
+    print(io, "NlinearSeriesOperation {$(op.func)}($(op.args))")
 end
 
 """
@@ -530,9 +530,10 @@ function getNum(op::NlinearSeriesOperation)::Number
         if arg isa ScalarSeriesSymbol
             throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
         else            
-            push!(to_aggregate, getSymbolics(arg))
+            push!(to_aggregate, getNum(arg))
         end
     end
+    @variables x y
     op.func(to_aggregate)
 end
 
@@ -552,7 +553,9 @@ end
     - `func` -- The function used to aggregate all the arguments. Should take a vector as
       input
     - `arg` -- A function that returns the arguments to be used when called on a number of
-      indices xᵢ.
+      indices xᵢ. arg should return either a SeriesCoefficient, Numbers ... or an operation
+      (NlinearSeriesOperation or MultilinearSeriesOperation) on SeriesCoefficients, Numbers 
+      ... In particular, arg CANNOT return anything representing a Series.
     - `arg_parameters::Vector` -- parameters to be passed to the arg function. If not
       empty, arg should accept a named parameter params.
     - `ranges::Vector{Tuple{Any, Any}}` -- The ranges between which the indices vary. i.e :
@@ -608,7 +611,7 @@ end
     getNum(op::MultilinearSeriesOperation)::Number
 
     Returns the Symbolics.Num expression representing the MultilinearSeriesOperation.
-    Only works if op is an operation on SymblicSeries coefficients.
+    Only works if op is an operation on SymbolicSeries coefficients.
 
     Using this function, objects that can be evaluated numerically are evaluated 
     numerically
@@ -617,10 +620,10 @@ function getNum(op::MultilinearSeriesOperation)::Number
     to_aggregate = []
     rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
     if isempty(op.arg_parameters)
-        foreach(x -> push!(to_aggregate, getSymbolics(op.arg(Tuple(x)...))), rngs)
+        foreach(x -> push!(to_aggregate, getNum(op.arg(Tuple(x)...))), rngs)
     else
         foreach(x -> push!(to_aggregate, 
-                           getSymbolics(op.arg(Tuple(x)...; params=op.arg_parameters))),
+                           getNum(op.arg(Tuple(x)...; params=op.arg_parameters))),
                 rngs)
     end
     op.func(to_aggregate)
@@ -691,9 +694,9 @@ end
 function Base.show(io::IO, s::SymbolicSeries)
     if s.ref isa ScalarSeriesSymbol
         if s.ref.ps isa PowerSeries
-            print(io, "$(s.ref.ps.seriesID)[$(s.ref.scalar_idx)]")
+            print(io, "$(s.ref.ps.seriesID)$([s.ref.scalar_idx]...)")
         else 
-            print(io, "$(s.ref.ps)[$(s.ref.scalar_idx)]")
+            print(io, "$(s.ref.ps)$([s.ref.scalar_idx...])")
         end
     else
         print(io, s.ref)
@@ -708,29 +711,29 @@ end
     MultilinearSeriesOperations while the leaves are SeriesCoefficients.
 """
 function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}) where D
-    if s.ref isa ScalarSeriesSymbol
-        s.ref[convertIndices_fullsym_to_trunc(args...)...]
-    elseif s.ref isa NlinearSeriesOperation
-        idx_subst = Dict([Symbol("idx$i") => v for (i,v) in enumerate(args)])
-        function substitution1(arg) 
-            if arg isa ScalarSeriesSymbol 
-                arg(args...) 
-            elseif arg in keys(idx_subst)
-                idx_subst[arg]
-            else
-                arg
-            end
+
+    idx_subst = Dict([Symbol("idx$i") => v for (i,v) in enumerate(args)])
+    substitution2(t) = (substitution(t[1]), substitution(t[2]))
+    function substitution(arg) 
+        if arg isa ScalarSeriesSymbol 
+            arg[convertIndices_fullsym_to_trunc(args...)...]
+        elseif arg isa SymbolicSeries
+            arg[args...]
+        elseif arg isa NlinearSeriesOperation
+            NlinearSeriesOperation(arg.func, map(substitution, arg.args))
+        elseif arg isa MultilinearSeriesOperation
+            MultilinearSeriesOperation(arg.func, 
+                               arg.arg, 
+                               substitution.(s.ref.arg_parameters), 
+                               substitution2.(s.ref.ranges))
+        elseif arg in keys(idx_subst)
+            idx_subst[arg]
+        else
+            arg
         end
-        NlinearSeriesOperation(s.ref.func, map(substitution1, s.ref.args))
-    else #s.ref isa MultilinearSeriesOperation
-        idx_subst = Dict([Symbol("idx$i") => v for (i,v) in enumerate(args)])
-        substitution2(x) = x in keys(idx_subst) ? idx_subst[x] : x
-        substitution3(t) = (substitution2(t[1]), substitution2(t[2]))
-        MultilinearSeriesOperation(s.ref.func, 
-                                   s.ref.arg, 
-                                   substitution2.(s.ref.arg_parameters), 
-                                   substitution3.(s.ref.ranges))
     end
+        
+    substitution(s.ref)
 end
 
 
@@ -776,30 +779,57 @@ getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s
 
     This is equivalent to getNum(s[idx])
 """
-getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s[idx...])
+getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getNum(s[idx...])
 
 function Base.:+(s1::SymbolicSeries, s2::SymbolicSeries)
     s1.center != s2.center && throw(ArgumentError("Can only add SymbolicSeries that have the
                                                    same centers"))
-    op = NlinearSeriesOperation(Base.:+, [s1, s2])
+    op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
     SymbolicSeries(op, s1.center)
 end
 
 function Base.:-(s1::SymbolicSeries, s2::SymbolicSeries)
     s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the
                                                    same centers"))
-    op = NlinearSeriesOperation(Base.:-, [s1, s2])
+    op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
     SymbolicSeries(op, s1.center)
 end
 
+"""
+    Base.:*(t::Number, s::SymbolicSeries)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
 function Base.:*(t::Number, s::SymbolicSeries)
-    op = NlinearSeriesOperation(Base.:*, [t, s])
+    op = NlinearSeriesOperation(v -> v[1]*v[2], [t, s])
     SymbolicSeries(op, s.center)
 end
+"""
+    Base.:*(s::SymbolicSeries, t::Number)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
 Base.:*(s::SymbolicSeries, t::Number) = t*s
 
+"""
+    Base.:/(s::SymbolicSeries, t::Number)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
 function Base.:/(s::SymbolicSeries, t::Number)
-    op = NlinearSeriesOperation(Base.:/, [s, t])
+    op = NlinearSeriesOperation(v -> v[1]/v[2], [s, t])
     SymbolicSeries(op, s.center)
 end
 
@@ -808,4 +838,162 @@ function Base.:*(s1::SymbolicSeries{1}, s2::SymbolicSeries{1})
     arg(j; params::Vector) = NlinearSeriesOperation(v -> v[1]*v[2], [s1[j], s2[params[1]-j]])
     op = MultilinearSeriesOperation(x -> Base.:+(x...), arg, [:idx1], [(0,:idx1)])
     SymbolicSeries(op, s1.center)
+end
+
+##################################### EvaluatedSymbolicSeries #####################################
+"""
+    EvaluatedSymbolicSeries{D}
+
+    This is an extension of SymbolicSeries{D} used for some operations such as integration, 
+    derivation, or multiplication of series of multiple variables. 
+
+    ### Fields
+
+    - `series::SymbolicSeries{D}` -- The SymbolicSeries that is being evaluated
+    - `variables::Vector{Num}` -- The variables in which the series is being evaluated
+
+    ### Examples
+
+    - `EvaluatedSymbolicSeries(series::SymbolicSeries, variables::Vector)` -- default 
+      constructor
+    - `(s::SymbolicSeries{D})(at::Vararg{Num, D})::EvaluatedSymbolicSeries{D} where D` -- 
+      Constructs an EvaluatedSymbolicSeries by evaluating an existing SymbolicSeries in 
+      some variables. Such variables can be obtained by using the Symbolics macro 
+      @variables and should all be different
+    - `(s::Array{SymbolicSeries})(at::Vararg{Num})::Array{EvaluatedSymbolicSeries} -- 
+      Constructs an array of EvaluatedSymbolicSeries by evaluating an array of
+      SymbolicSeries
+"""
+struct EvaluatedSymbolicSeries{D}
+    series::SymbolicSeries{D}
+    variables::Vector{Num}
+end
+
+function (s::SymbolicSeries{D})(at::Vararg{Num, D})::EvaluatedSymbolicSeries{D} where D
+    variables = [at...]
+    allunique(variables) || throw(ArgumentError("To create an EvaluatedSymbolicSeries, a
+                                                 SymbolicSeries must be called on different
+                                                 variables"))
+    EvaluatedSymbolicSeries(s, variables)
+end
+
+function (a::Array{SymbolicSeries})(at::Vararg{Num})::Array{EvaluatedSymbolicSeries}
+    map(s -> s(at...), a)
+end
+
+Base.show(io::IO, ess::EvaluatedSymbolicSeries) = print(io, "$(ess.series)($(["$v," for v in ess.variables]...))")
+
+function Base.:+(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+    s1.variables == s2.variables || throw(ArgumentError("Can only add SymbolicSeries
+                                                         evaluated in the same variables"))
+    EvaluatedSymbolicSeries(s1.series + s2.series, s1.variables)
+end
+
+Base.getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}) where D = ess.series[I...]
+
+function Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+    s1.variables == s2.variables || throw(ArgumentError("Can only substract SymbolicSeries
+                                                         evaluated in the same variables"))
+    EvaluatedSymbolicSeries(s1.series - s2.series, s1.variables)
+end
+
+"""
+    Base.:*(t::Number, s::EvaluatedSymbolicSeries)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
+function Base.:*(t::Number, s::EvaluatedSymbolicSeries)
+    EvaluatedSymbolicSeries(t*s.series, s.variables)
+end
+"""
+    Base.:*(s::EvaluatedSymbolicSeries, t::Number)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
+Base.:*(s::EvaluatedSymbolicSeries, t::Number) = t*s
+
+"""
+    Base.:/(s::EvaluatedSymbolicSeries, t::Number)
+
+    ###Notes
+
+    WARNING : This operation is only supported when t has a numerical value.
+    For instance, multiplication by a Symbolics' variable is non linear and
+    will lead to unexpected results.
+"""
+function Base.:/(s::EvaluatedSymbolicSeries, t::Number)
+    EvaluatedSymbolicSeries(s.series/t, s.variables)
+end
+
+"""
+    Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+
+    Multiply two EvaluatedSymbolicSeries. These two series might have different
+    sets of variables and in different orders. The resulting EvaluatedSymbolicSeries
+    will have the union of variables in the two series as variables and their order will
+    be : order of the variables in the first series, then for variables that only appear in
+    s2, order of the variables in s1. 
+"""
+function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+    
+    # check if centers are the same 
+    s1.series.center == s2.series.center || throw(ArgumentError("Can only multiply series
+                                                                 that have the same centers"))
+
+    # associate each variable with its index in the vectors of variables
+    variables_idx_s1 = Dict([v => i for (i,v) in enumerate(s1.variables)])
+    variables_idx_s2 = Dict([v => i for (i,v) in enumerate(s2.variables)])
+
+    # resulting variables
+    res_variables = copy(s1.variables)
+    added_variables_s2 = Num[setdiff(keys(variables_idx_s2), keys(variables_idx_s1))...]
+    added_variables_s2 = added_variables_s2[[variables_idx_s2[v] for v in added_variables_s2]]
+    res_variables = [res_variables; added_variables_s2]
+    res_variables_idx = Dict([v => i for (i,v) in enumerate(res_variables)])
+
+    # construct center
+    new_center = map(v -> v in keys(variables_idx_s1) ? 
+                          s1.series.center[variables_idx_s1[v]] : 
+                          s2.series.center[variables_idx_s2[v]],
+                          res_variables)
+
+    # construct ranges
+    common_variables = filter(v -> v in (keys(variables_idx_s1) ∩ keys(variables_idx_s2)),
+                              res_variables)
+    ranges = [(0, Symbol("idx$(res_variables_idx[v])")) for v in common_variables]
+    ranges_idx = Dict([v => i for (i,v) in enumerate(common_variables)])
+
+    # construct params
+    params = [Symbol("idx$i") for i in 1:length(res_variables)]
+
+    # construct arg
+    common_variables_set = keys(variables_idx_s1) ∩ keys(variables_idx_s2)
+    function arg(I::Vararg; params::Vector)
+        ## construct coefficients indices
+        idx_s1 = Vector(undef, length(s1.variables))
+        idx_s2 = Vector(undef, length(s2.variables))
+        for (i,v) in enumerate(s1.variables)
+            idx_s1[i] = v in common_variables_set ? I[ranges_idx[v]] : params[res_variables_idx[v]]
+        end
+        for (i,v) in enumerate(s2.variables)
+            idx_s2[i] = v in common_variables_set ? params[res_variables_idx[v]] - I[ranges_idx[v]] : params[res_variables_idx[v]]
+        end
+
+        ## return multiplication of the coefficients
+        NlinearSeriesOperation(v -> v[1]*v[2], [s1.series[idx_s1...], s2.series[idx_s2...]])
+    end
+
+    op = MultilinearSeriesOperation(v -> +(v...), arg, params, ranges)
+
+    new_ss = SymbolicSeries(op, new_center)
+
+    EvaluatedSymbolicSeries(new_ss, res_variables)
 end
