@@ -25,7 +25,6 @@ sincos_ss = SymbolicSeries(sincos_series)
 @test getValue(sincos_ss[2][0,2]) ≈ -1/2
 
 sincos_ss[1](x,y)/3
-K_ss(x)
 
 for i in 0:3, j in 0:3, k in 0:3
     if (i,j,k) != (1,0,0) && (i,j,k) != (3,0,0)
@@ -34,3 +33,18 @@ for i in 0:3, j in 0:3, k in 0:3
 end
 @test getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y))[1,0,0]) ≈ 1
 @test getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y))[3,0,0]) ≈ -2/3
+
+∂x = Differential(x)
+@test getNum(∂x(sincos_ss[1](x,y))[0,0]) ≈ 1
+@test getNum(∂x(sincos_ss[1](x,y))[2,0]) ≈ -1/2
+
+test1_ts = TaylorExpansionSeries{Float64}(:t1, [x,y,z], [x^2 + 2x*y + y^2 + x + z + 3y*z], [0,0,0])
+compute_coefficients!(test1_ts, 10)
+test1_ss = SymbolicSeries(test1_ts)
+
+
+@test getNum(test1_ss(x, x, z)[2,0]) ≈ 4
+@test getNum(test1_ss(x, y, y)[0,2]) ≈ 4
+@test getNum(test1_ss(x, z, z)[0,1]) ≈ 1
+@test getNum(test1_ss(x, y, x)[1,0]) ≈ 2
+@test getNum(test1_ss(x, y, x)[1,1]) ≈ 5

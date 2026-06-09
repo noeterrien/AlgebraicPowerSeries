@@ -206,3 +206,5 @@ function getAllVariables(exprs::Vector)::Vector{Num}
     end
     Vector([res...])
 end
+
+generate_index_list(D::Int) = [Symbol("idx$i") for i in 1:D]
