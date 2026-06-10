@@ -1245,8 +1245,10 @@ end
 
 Base.:~(LHS::Union{SymbolicSeries{D}, Number}, RHS::Union{SymbolicSeries{D}, Number}) where D = SymbolicSeriesEquation(LHS, RHS)
 Base.:~(LHS::Union{EvaluatedSymbolicSeries{D}, Number}, RHS::Union{EvaluatedSymbolicSeries{D}, Number}) where D = SymbolicSeriesEquation(LHS, RHS)
+Base.:~(LHS::Number, RHS::Number) = Equation(LHS, RHS)
 
 Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "SymbolicSeriesEquation{\n $(eq.LHS) \n ~ \n $(eq.RHS) \n}")
 
 getSymbolics(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getSymbolics(eq.LHS, idx...) ~ getSymbolics(eq.RHS, idx...)
 getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getNum(eq.LHS, idx...) ~ getNum(eq.RHS, idx...)
+
