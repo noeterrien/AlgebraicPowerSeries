@@ -105,7 +105,9 @@ end
 
     A vector of the output index
 """
-convertIndices_fullsym_to_trunc(I::Vararg{Int64}) = [+(I[i:end]...) for i in 1:length(I)]
+convertIndices_fullsym_to_trunc(I::Vararg{Int64}) = [+(I[i:end]...) for i in eachindex(I)]
+
+convertIndices_trunc_to_fullsym(I::Vararg{Int64}) = begin J = [I..., 0] ; [J[i]-J[i+1] for i in eachindex(I)] end
 
 """
     decode_coeffIndex(u_sym::Num)::Tuple{Vector{Int}, Int}
@@ -208,3 +210,27 @@ function getAllVariables(exprs::Vector)::Vector{Num}
 end
 
 generate_index_list(D::Int) = [Symbol("idx$i") for i in 1:D]
+
+"""
+    generate_trunc_indices(N::Int, D::Int)
+
+    Generates the truncated indices of order N and dimension D
+    For instance, 
+    generate_trunc_indices(2, 3) = [[2,0,0], [2,1,0], [2,1,1], [2,2,0], [2,2,1], [2,2,2]]
+"""
+function generate_trunc_indices(N::Int, D::Int)::Vector
+    if D==1
+        [N]
+    else
+        prev_res = generate_trunc_indices(N, D-1)
+        res = []
+        for idx in prev_res
+            for i in 0:idx[end]
+                push!(res, [idx..., i])
+            end
+        end
+        res
+    end
+end
+
+generate_fullsym_indices(N::Int, D::Int)::Vector = map(idx -> convertIndices_trunc_to_fullsym(idx...), generate_trunc_indices(N,D))

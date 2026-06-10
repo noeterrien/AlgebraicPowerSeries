@@ -1252,3 +1252,68 @@ Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "SymbolicSeriesEquatio
 getSymbolics(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getSymbolics(eq.LHS, idx...) ~ getSymbolics(eq.RHS, idx...)
 getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getNum(eq.LHS, idx...) ~ getNum(eq.RHS, idx...)
 
+################################### PDESeries ####################################
+
+"""
+    PDESeries{T,D} <: PowerSeries{T,D}
+
+    A concrete type representing a PowerSeries defined by a PDE and its boundary conditions.
+    The PDE system must be closed for it to work properly
+
+    ### Fields
+
+    - `seriesID::Symbol` -- A unique reference to the series that might be used to choose
+      unique IDs for SeriesCoefficient
+    - `size::NTuple{D,Int}` -- size of the series (similar to Array)
+    - `variables::Vector{Num}` -- The series variables, for instance x in Σaᵢxⁱ
+    - `center::Vector` -- The series center, i.e c in Σaᵢ(x-c)ⁱ
+    - `coefficients::Array{Vector{T},D}` -- The series coefficients
+    - `order::Int` -- The order to which coefficients were already computed (-1 means none)
+    - `scalar_series_ref::Array{ScalarSeriesSymbol, D}` -- An array of 
+      ScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
+
+    - `equations::Vector{Union{Equation, SymbolicSeriesEquation}}` -- The PDE and its boundary 
+      conditions
+    - `indices_inference::Vector` -- A Vector of function that returns the indices each
+      equation should be called with to get the equations of a given order N.
+      Its input should be an integer N representing the order of the series and the output
+      should be a Vector of Vector of indices when eq ∈ equations isa 
+      SymbolicSeriesEquation. The indices should be specified in fullsym format, i.e,
+      a₀₀ + a₁₀ x + a₀₁ y + a₂₀ x² + a₁₁ xy + a₀₂ y² +... 
+      When eq isa Equation, then the output should either be true
+      or false to indicate if the equation should be used or not.
+
+
+    ### Examples
+
+    - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
+                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
+                    equations::Vector{Union{Equation, SymbolicSeriesEquation}},
+                    indices_inference::Vector) where T` -- default constructor
+"""
+mutable struct PDESeries{T,D} <: PowerSeries{T,D}
+    
+    seriesID::Symbol
+    size::NTuple{D,Int}
+    variables::Vector{Num}
+    center::Vector
+    coefficients::Array{Vector{T},D}
+    order::Int
+    scalar_series_ref::Array{ScalarSeriesSymbol, D}
+
+    equations::Vector{Union{Equation, SymbolicSeriesEquation}}
+    indices_inference::Vector
+
+    function PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
+                          unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
+                          equations::Vector,
+                          indices_inference::Vector) where {T}
+
+        _size = unknown isa AbstractArray ? size(unknown) : (1,)
+        coefficients = Array{Vector{T}}(undef, _size)
+
+        new{T, unknown isa AbstractArray ? ndims(unknown) : 1}(seriesID, _size, variables, 
+        center, coefficients, -1, unknown isa AbstractArray ? unknown : [unknown], equations, indices_inference)
+    end
+
+end
