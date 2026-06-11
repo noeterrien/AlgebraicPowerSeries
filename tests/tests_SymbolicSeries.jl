@@ -21,8 +21,8 @@ getNum(x*K_ss[2,2], 4)
 sincos_series = TaylorExpansionSeries{Float64}(:sincos, [x,y], [sin(x), cos(y)], [0,0])
 compute_coefficients!(sincos_series, 6)
 sincos_ss = SymbolicSeries(sincos_series)
-@test getValue(sincos_ss[1][1,1]) ≈ 0
-@test getValue(sincos_ss[2][0,2]) ≈ -1/2
+@test getNum(sincos_ss[1][1,1]) ≈ 0
+@test getNum(sincos_ss[2][0,2]) ≈ -1/2
 
 sincos_ss[1](x,y)/3
 

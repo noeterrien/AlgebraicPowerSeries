@@ -176,35 +176,7 @@ end
 Base.show(io::IO, sc::SeriesCoefficient) = print(io, sc.unique_sym)
 
 
-"""
-    getValue(sc::SeriesCoefficient)
 
-    Returns the value of the coefficient. If it has not been computed yet, throws an error
-
-    ###Input
-
-    - `sc::SeriesCoefficient` -- a SeriesCoefficient
-
-    ###Output
-
-    If the SeriesCoefficient refers to a PowerSeries (and not :self), and the coefficient
-    has already been computed, the value of this coefficient is returned.
-
-    Otherwise, throws an error
-
-"""
-function getValue(sc::SeriesCoefficient)
-    if sc.ps!=:self
-        if sc.indices[1] ≤ sc.ps.order
-            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
-        else
-            throw(ArgumentError("Coefficient at index $(sc.indices) not computed yet. Cannot get value"))
-        end
-    else
-        throw(ArgumentError("Cannot return value of a coefficient which refers to series \
-                             :self"))
-    end
-end
 
 #--------------------------------------------------------ScalarSeriesSymbol-------------------------------------------------------------
 
@@ -1236,12 +1208,12 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
     # build get_selfseries_coefficients function
     function get_selfseries_coefficients(index::Vararg{Int})
         # substitute values of index in ranges
-        ranges = map(t -> (t[1] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[1]]] : t[1]):
+        _ranges = map(t -> (t[1] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[1]]] : t[1]):
                           (t[2] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[2]]] : t[2]), 
                      ranges)
         
         res = Set()
-        for I in CartesianIndices(tuple(ranges...))
+        for I in CartesianIndices(tuple(_ranges...))
             idx_s1 = Vector(undef, length(s1.variables))
             idx_s2 = Vector(undef, length(s2.variables))
             for (i,v) in enumerate(s1.variables)
@@ -1458,7 +1430,8 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
 
     - `ps::PDESeries` -- the PowerSeries for which the coefficients should be computed
     - `N::Int` -- the order up to which the coefficients should be computed
-    - `solver=symbolic_linear_solve` -- The solver to be used
+    - `solver=((eqs, xs) -> Symbolics.value.(Symbolics.symbolic_linear_solve(eqs, xs)))` --
+      The solver to be used
     - `verbose::Int=0` -- 
       * If verbose ≥ 1, indicates when an order is being computed and
       when it is done
@@ -1477,7 +1450,7 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
       solver used. In that case, the new solver should take as arguments a Vector of 
       Equation and a Vector of Num representing the unknown of this system of equations, 
       and return a Vector of values for each unknown, in the same order as the Vector of 
-      unknowns
+      unknowns. The type of these values should be castable to the type of the PDESeries
 
     - Since this function changes the PowerSeries the unknown relates to, one should not
       use the same unknown for different systems of equations. If required, this function
@@ -1485,66 +1458,64 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
       problem 
 """
 function compute_coefficients!(ps::PDESeries, N::Int; 
-                               solver=Symbolics.symbolic_linear_solve, 
+                               solver=((eqs, xs) -> Symbolics.value.(Symbolics.symbolic_linear_solve(eqs, xs))), 
                                verbose::Int=0)
 
-    if N ≤ ps.order
-        return
-    elseif N > ps.order+1
-        compute_coefficients!(ps, N-1; solver=solver, verbose=verbose)
-    else
-        verbose ≥ 1 && println("Computing coefficients of order $N")
+    N ≤ ps.order && return
+    
+    N > ps.order+1 && compute_coefficients!(ps, N-1; solver=solver, verbose=verbose)
+    
 
-        # first generate all equations and unknowns for order N
-        eqs = Equation[]
-        unknowns = Set()
-        for (eq, idx_inf) in zip(ps.equations, ps.indices_inference)
-            if eq isa Equation
-                if idx_inf[1] == N
-                    push!(eqs, eq)
-                    unknowns = unknowns ∪ Set(idx_inf[2])
-                end
-            else # eq isa SymbolicSeriesEquation
-                expand_for_indices = idx_inf(N)
-                for idx in expand_for_indices
-                    push!(eqs, getNum(eq, idx...))
-                    unknowns = unknowns ∪ get_involved_selfseries_coefficients(eq, idx...)
-                end
+    verbose ≥ 1 && println("Computing coefficients of order $N")
+
+    # first generate all equations and unknowns for order N
+    eqs = Equation[]
+    unknowns = Set()
+    for (eq, idx_inf) in zip(ps.equations, ps.indices_inference)
+        if eq isa Equation
+            if idx_inf[1] == N
+                push!(eqs, eq)
+                unknowns = unknowns ∪ Set(idx_inf[2])
+            end
+        else # eq isa SymbolicSeriesEquation
+            expand_for_indices = idx_inf(N)
+            for idx in expand_for_indices
+                push!(eqs, getNum(eq, idx...))
+                unknowns = unknowns ∪ get_involved_selfseries_coefficients(eq, idx...)
             end
         end
-
-        # check if unknowns matches the expected unknowns
-        ordered_unknowns = expected_unknowns(ps.scalar_series_ref, length(ps.variables), N)
-        flattened_ordered_unknowns = [ordered_unknowns...;]
-        @assert unknowns == Set(flattened_ordered_unknowns)
-
-        if verbose ≥ 2
-            println("Equations for order $N : ")
-            foreach(eq -> println(eq), eqs)
-            println("To solve with unknowns : ")
-            foreach(unknown -> print("$unknown, "), flattened_ordered_unknowns)
-            println()
-        end
-
-        # solve
-        res = solver(eqs, getSymbolics.(flattened_ordered_unknowns))
-
-        # make room to add new coefficients 
-        number_of_new_coefficients = length(ordered_unknowns[1])
-        old_length = length(ps.coefficients[1])
-        new_length = old_length + number_of_new_coefficients
-        foreach(idx -> resize!(ps.coefficients[idx], new_length), eachindex(ps.coefficients))
-
-        # fill in with the new coefficients
-        for (sc, val) in zip(flattened_ordered_unknowns, res)
-            @show typeof(val)
-            ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] # = val
-            sc.ps = ps
-        end
-
-        # update order
-        ps.order = N
-        
-        verbose ≥ 1 && println("Coefficients computed up to order $N")
     end
+
+    # check if unknowns matches the expected unknowns
+    ordered_unknowns = expected_unknowns(ps.scalar_series_ref, length(ps.variables), N)
+    flattened_ordered_unknowns = [ordered_unknowns...;]
+    @assert unknowns == Set(flattened_ordered_unknowns)
+
+    if verbose ≥ 2
+        println("Equations for order $N : ")
+        foreach(eq -> println(eq), eqs)
+        println("To solve with unknowns : ")
+        foreach(unknown -> print("$unknown, "), flattened_ordered_unknowns)
+        println()
+    end
+
+    # solve
+    res = solver(eqs, getSymbolics.(flattened_ordered_unknowns))
+
+    # make room to add new coefficients 
+    number_of_new_coefficients = length(ordered_unknowns[1])
+    old_length = length(ps.coefficients[1])
+    new_length = old_length + number_of_new_coefficients
+    foreach(idx -> resize!(ps.coefficients[idx], new_length), eachindex(ps.coefficients))
+
+    # fill in with the new coefficients
+    for (sc, val) in zip(flattened_ordered_unknowns, res)
+        ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] = val
+        sc.ps = ps
+    end
+
+    # update order
+    ps.order = N
+        
+    verbose ≥ 1 && println("Coefficients computed up to order $N")
 end
