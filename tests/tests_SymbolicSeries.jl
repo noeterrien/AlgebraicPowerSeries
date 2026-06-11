@@ -51,3 +51,8 @@ test1_ss = SymbolicSeries(test1_ts)
 
 @test (K_ss[1,1]*K_ss[1,2]).get_selfseries_coefficients(2) == Set([K_ss[1,1][0], K_ss[1,1][1], K_ss[1,1][2],
                                                                   K_ss[1,2][0], K_ss[1,2][1], K_ss[1,2][2]])
+
+c = SymbolicSeries(TaylorExpansionSeries{Float64}(:c, [x], [1/(3+x^2)], [0]))
+K = SymbolicSeries(selfseries_symbols(2), [0,0])
+@show getSymbolics((c(x)*K[1](x,y))[1,0])
+@show getSymbolics((c(x)*K[1](x,y))[0,1])

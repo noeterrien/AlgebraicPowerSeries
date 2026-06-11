@@ -796,7 +796,7 @@ end
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the \
                                                    same centers"))
-    op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
+    op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2])
     SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
@@ -1303,8 +1303,14 @@ function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D}, Number},
                                                            SymbolicSeriesEquation with two \
                                                            EvaluatedSymbolicSeries which \
                                                            variables do not match"))
-
-        SymbolicSeriesEquation(LHS.series, RHS.series)
+        # if necessary, swap indices of RHS
+        var_idx = Dict([v => i for (i,v) in enumerate(LHS.variables)])
+        index = generate_index_list(length(LHS.variables))
+        swap = NlinearSeriesOperation(index -> RHS.series[[index[var_idx[v]] for v in RHS.variables]...], index)
+        get_selfseries_coefficients(index::Vararg{Int,D}) = RHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in RHS.variables]...)
+        new_RHSseries = SymbolicSeries(swap, RHS.series.center, get_selfseries_coefficients)
+        
+        SymbolicSeriesEquation(LHS.series, new_RHSseries)
     else
         SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : LHS, 
                                RHS isa EvaluatedSymbolicSeries ? RHS.series : RHS)
@@ -1436,6 +1442,7 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
       * If verbose ≥ 1, indicates when an order is being computed and
       when it is done
       * If verbose ≥ 2, shows the equations and the unknowns for each order
+      * If verbose ≥ 3, displays the equations in fully parametric form
 
     ###Output
 
@@ -1470,6 +1477,7 @@ function compute_coefficients!(ps::PDESeries, N::Int;
 
     # first generate all equations and unknowns for order N
     eqs = Equation[]
+    sym_eqs = Equation[]
     unknowns = Set()
     for (eq, idx_inf) in zip(ps.equations, ps.indices_inference)
         if eq isa Equation
@@ -1481,6 +1489,7 @@ function compute_coefficients!(ps::PDESeries, N::Int;
             expand_for_indices = idx_inf(N)
             for idx in expand_for_indices
                 push!(eqs, getNum(eq, idx...))
+                verbose ≥ 3 && push!(sym_eqs, getSymbolics(eq, idx...))
                 unknowns = unknowns ∪ get_involved_selfseries_coefficients(eq, idx...)
             end
         end
@@ -1492,7 +1501,12 @@ function compute_coefficients!(ps::PDESeries, N::Int;
     @assert unknowns == Set(flattened_ordered_unknowns)
 
     if verbose ≥ 2
-        println("Equations for order $N : ")
+        if verbose ≥ 3
+            println("Equation for order $N in symbolic form : ")
+            foreach(eq -> println(eq), sym_eqs)
+            println("Equations for order $N in reduced form : ")
+        end
+        verbose ≤ 2 && println("Equations for order $N : ")
         foreach(eq -> println(eq), eqs)
         println("To solve with unknowns : ")
         foreach(unknown -> print("$unknown, "), flattened_ordered_unknowns)
