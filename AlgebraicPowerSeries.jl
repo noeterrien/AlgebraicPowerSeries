@@ -206,7 +206,7 @@ function getValue(sc::SeriesCoefficient)
     end
 end
 
-#-----------------------------------------------------------SeriesSymbol-------------------------------------------------------------
+#--------------------------------------------------------ScalarSeriesSymbol-------------------------------------------------------------
 
 """
     ScalarSeriesSymbol <: AbstractScalarSeriesSymbol
@@ -1274,14 +1274,15 @@ getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getNum(eq.L
 
     - `equations::Vector{Union{Equation, SymbolicSeriesEquation}}` -- The PDE and its boundary 
       conditions
-    - `indices_inference::Vector` -- A Vector of function that returns the indices each
+    - `indices_inference::Vector` -- A Vector that indicates the indices / if each
       equation should be called with to get the equations of a given order N.
-      Its input should be an integer N representing the order of the series and the output
-      should be a Vector of Vector of indices when eq ∈ equations isa 
-      SymbolicSeriesEquation. The indices should be specified in fullsym format, i.e,
-      a₀₀ + a₁₀ x + a₀₁ y + a₂₀ x² + a₁₁ xy + a₀₂ y² +... 
-      When eq isa Equation, then the output should either be true
-      or false to indicate if the equation should be used or not.
+      The order of this Vector is the same as the order of the equations Vector.
+      For each eq ∈ equations, 
+        * if eq isa Equation, then provide an order for which this equation should be used
+        * if eq isa SymbolicSeriesEquation, provide a function whose input is an integer N
+          representing the order that is being computed and whose output is a Vector of 
+          Vector of indices, specified in fullsym format, i.e 
+          a₀₀ + a₁₀ x + a₀₁ y + a₂₀ x² + a₁₁ xy + a₀₂ y² +... 
 
 
     ### Examples
