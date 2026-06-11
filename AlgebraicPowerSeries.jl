@@ -150,7 +150,7 @@ build(ps::PowerSeries) = build(ps, ps.order)
                          index::NTuple{Int, D}) where D` -- default constructor
 
 """
-struct SeriesCoefficient{D}
+mutable struct SeriesCoefficient{D}
     ps::Union{AbstractPowerSeries{D}, Symbol}
     sym::Num
     unique_sym::Num
@@ -296,15 +296,20 @@ end
 
     ###Input 
 
-    - `size::Vararg{Int}` -- The size of the series array
+    - `size::Vararg{Int}` -- The size of the series array. If no argument is given, returns
+      a ScalarSeriesSymbol
 
     ###Output
 
-    An array of size size containing ScalarSeriesSymbol that refer to series :selfs
+    An array of size size containing ScalarSeriesSymbol that refer to series :self
 """
 function selfseries_symbols(size::Vararg{Int}) 
-    ci = reshape(collect(CartesianIndices(size)), size)
-    map(idx -> ScalarSeriesSymbol(:self, Tuple(idx), Dict()), ci)
+    if length(size) == 0
+        ScalarSeriesSymbol(:self, (1,), Dict())
+    else
+        ci = reshape(collect(CartesianIndices(size)), size)
+        map(idx -> ScalarSeriesSymbol(:self, Tuple(idx), Dict()), ci)
+    end
 end
 
 #-----------------------------------------------------------TaylorSeries-------------------------------------------------------------
@@ -656,13 +661,20 @@ end
       Numbers)
     - `center::Vector` -- A vector of length D which represents the center around which
       the series should be computed when needed
+    - `get_selfseries_coefficients` -- A function which, given a Vararg{Int, D} returns the
+      SeriesCoefficients that refer to series :self that appear when computing the
+      coefficient of that series at this index. The return value should be a 
+      Set{SeriesCoefficient}
 
     ### Examples
 
     - `SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
                                  NlinearSeriesOperation, 
                                  MultilinearSeriesOperation}, 
-                      center::Vector)` -- default constructor
+                      center::Vector,
+                      get_selfseries_coefficients)` -- default constructor
+    - `SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)` -- Creates a SymbolicSeries
+      from a ScalarSeriesSymbol
     - `SymbolicSeries(a::Array{ScalarSeriesSymbol}, center::Vector)::Array{SymbolicSeries}` 
       -- A constructor to easily create an array of SymbolicSeries{D} around the same 
       center
@@ -675,11 +687,24 @@ end
 struct SymbolicSeries{D}
     ref::Union{ScalarSeriesSymbol, NlinearSeriesOperation, MultilinearSeriesOperation}
     center::Vector
+    get_selfseries_coefficients
 
     SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
                               NlinearSeriesOperation,
                               MultilinearSeriesOperation},
-                   center::Vector) = new{length(center)}(ref, center)
+                   center::Vector,
+                   get_selfseries_coefficients) = new{length(center)}(ref, center, get_selfseries_coefficients)
+end
+
+function SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)
+    if sss.ps != :self
+        SymbolicSeries(sss, center, I::Vararg{Int} -> Set())
+    else
+        get_selfseries_coefficients(I::Vararg{Int}) = sss[convertIndices_fullsym_to_trunc(I...)...].ps == :self ? 
+                                                      Set([sss[convertIndices_fullsym_to_trunc(I...)...]]) : 
+                                                      Set()
+        SymbolicSeries(sss, center, get_selfseries_coefficients)
+    end
 end
 
 function SymbolicSeries(a::Array{ScalarSeriesSymbol}, 
@@ -789,18 +814,18 @@ getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s
 """
 getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getNum(s[idx...])
 
-function Base.:+(s1::SymbolicSeries, s2::SymbolicSeries)
+function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     s1.center != s2.center && throw(ArgumentError("Can only add SymbolicSeries that have the \
                                                    same centers"))
     op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
-    SymbolicSeries(op, s1.center)
+    SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
-function Base.:-(s1::SymbolicSeries, s2::SymbolicSeries)
+function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the \
                                                    same centers"))
     op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
-    SymbolicSeries(op, s1.center)
+    SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
 """
@@ -814,7 +839,7 @@ end
 """
 function Base.:*(t::Number, s::SymbolicSeries)
     op = NlinearSeriesOperation(v -> v[1]*v[2], [t, s])
-    SymbolicSeries(op, s.center)
+    SymbolicSeries(op, s.center, s.get_selfseries_coefficients)
 end
 """
     Base.:*(s::SymbolicSeries, t::Number)
@@ -839,14 +864,15 @@ Base.:-(s::SymbolicSeries) = -1*s
 """
 function Base.:/(s::SymbolicSeries, t::Number)
     op = NlinearSeriesOperation(v -> v[1]/v[2], [s, t])
-    SymbolicSeries(op, s.center)
+    SymbolicSeries(op, s.center, s.get_selfseries_coefficients)
 end
 
 function Base.:*(s1::SymbolicSeries{1}, s2::SymbolicSeries{1})
     s1.center != s2.center && throw(ArgumentError("Can only multiply SymbolicSeries that have the same centers"))
     arg(j; params::Vector=[]) = NlinearSeriesOperation(v -> v[1]*v[2], [s1[j], s2[params[1]-j]])
     op = MultilinearSeriesOperation(x -> Base.:+(x...), arg, [:idx1], [(0,:idx1)])
-    SymbolicSeries(op, s1.center)
+    get_selfseries_coefficients(i::Int) = union([s1.get_selfseries_coefficients(j) ∪ s2.get_selfseries_coefficients(i-j) for j in 0:i]...)
+    SymbolicSeries(op, s1.center, get_selfseries_coefficients)
 end
 
 ##################################### EvaluatedSymbolicSeries #####################################
@@ -940,6 +966,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Num, D})::EvaluatedSymbolicSeries whe
 
     # construct params list
     params = generate_index_list(length(new_var))
+    idx_symbol_to_idx = Dict([s => i for (i,s) in enumerate(params)])
 
     # construct ranges
     ranges = Tuple{Any, Any}[]
@@ -963,9 +990,36 @@ function (s::SymbolicSeries{D})(at::Vararg{Num, D})::EvaluatedSymbolicSeries whe
         s[idx...]
     end
 
+    # build get_selfseries_coefficients function
+    function get_selfseries_coefficients(index::Vararg{Int})
+        # substitute ranges by their values in index
+        _ranges = map(t -> (t[1] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[1]]] : t[1]):
+                           (t[2] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[2]]] : t[2]), 
+                      ranges)
+
+
+        # iterate over all ranges
+        res = Set()
+        for I in CartesianIndices(tuple(_ranges...))
+            idx = []
+            rg_idx = 1
+            for (i,v) in enumerate(variables)
+                if i == index_mapper[i]
+                    push!(idx, index[new_var_idx[v]])
+                else
+                    push!(idx, I[rg_idx])
+                    idx[index_mapper[i]] -= I[rg_idx]
+                    rg_idx += 1
+                end
+            end
+            res = res ∪ s.get_selfseries_coefficients(idx...)
+        end
+        res
+    end
+
     # finally make new SymbolicSeries
     op = MultilinearSeriesOperation(v -> +(v...), arg, params, ranges)
-    new_series = SymbolicSeries(op, center)
+    new_series = SymbolicSeries(op, center, get_selfseries_coefficients)
 
     EvaluatedSymbolicSeries(new_series, new_var)
 end
@@ -989,8 +1043,22 @@ function (s::SymbolicSeries{D})(at::Vararg{Union{Num, Symbol},
         end
     end
 
+    function get_selfseries_coefficients(I::Vararg{Int})
+        idx = []
+        I_idx = 1
+        for (i,v) in enumerate(at)
+            if v == :c 
+                push!(idx, 0)
+            else
+                push!(idx, I[I_idx])
+                I_idx += 1
+            end
+        end
+        s.get_selfseries_coefficients(idx...)
+    end
+
     op = NlinearSeriesOperation(v -> s[v...], args)
-    new_series = SymbolicSeries(op, new_center)
+    new_series = SymbolicSeries(op, new_center, get_selfseries_coefficients)
 
     new_series(new_vars...)
 end
@@ -1027,14 +1095,15 @@ Base.getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}) where D = ess.
     Checks if s1 and s2 have the same variables. If their order differ, 
     the order of s1 is kept
 """
-function Base.:+(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+function Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D
     isequal(Set(s1.variables), Set(s2.variables)) || throw(ArgumentError("Can only add SymbolicSeries \
                                                          evaluated in the same variables"))
     # if necessary, swap indices of s2
     var_idx = Dict([v => i for (i,v) in enumerate(s1.variables)])
     index = generate_index_list(length(s1.variables))
     swap = NlinearSeriesOperation(index -> s2.series[[index[var_idx[v]] for v in s2.variables]...], index)
-    new_s2series = SymbolicSeries(swap, s2.series.center)
+    get_selfseries_coefficients(index::Vararg{Int,D}) = s2.series.get_selfseries_coefficients([index[var_idx[v]] for v in s2.variables]...)
+    new_s2series = SymbolicSeries(swap, s2.series.center, get_selfseries_coefficients)
 
     EvaluatedSymbolicSeries(s1.series + new_s2series, s1.variables)
 end
@@ -1048,7 +1117,7 @@ end
     Checks if s1 and s2 have the same variables. If their order differ, 
     the order of s1 is kept
 """
-function Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
+function Base.:-(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D
     isequal(Set(s1.variables), Set(s2.variables)) || throw(ArgumentError("Can only substract SymbolicSeries \
                                                          evaluated in the same variables"))
 
@@ -1056,7 +1125,8 @@ function Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
     var_idx = Dict([v => i for (i,v) in enumerate(s1.variables)])
     index = generate_index_list(length(s1.variables))
     swap = NlinearSeriesOperation(index -> s2.series[[index[var_idx[v]] for v in s2.variables]...], index)
-    new_s2series = SymbolicSeries(swap, s2.series.center)
+    get_selfseries_coefficients(index::Vararg{Int,D}) = s2.series.get_selfseries_coefficients([index[var_idx[v]] for v in s2.variables]...)
+    new_s2series = SymbolicSeries(swap, s2.series.center, get_selfseries_coefficients)
 
     EvaluatedSymbolicSeries(s1.series - new_s2series, s1.variables)
 end
@@ -1144,6 +1214,7 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
 
     # construct params
     params = generate_index_list(length(res_variables))
+    idx_symbol_to_idx = Dict([s => i for (i,s) in enumerate(params)])
 
     # construct arg
     common_variables_set = keys(variables_idx_s1) ∩ keys(variables_idx_s2)
@@ -1162,9 +1233,33 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
         NlinearSeriesOperation(v -> v[1]*v[2], [s1.series[idx_s1...], s2.series[idx_s2...]])
     end
 
-    op = MultilinearSeriesOperation(v -> +(v...), arg, params, ranges)
+    # build get_selfseries_coefficients function
+    function get_selfseries_coefficients(index::Vararg{Int})
+        # substitute values of index in ranges
+        ranges = map(t -> (t[1] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[1]]] : t[1]):
+                          (t[2] in keys(idx_symbol_to_idx) ? index[idx_symbol_to_idx[t[2]]] : t[2]), 
+                     ranges)
+        
+        res = Set()
+        for I in CartesianIndices(tuple(ranges...))
+            idx_s1 = Vector(undef, length(s1.variables))
+            idx_s2 = Vector(undef, length(s2.variables))
+            for (i,v) in enumerate(s1.variables)
+                idx_s1[i] = v in common_variables_set ? I[ranges_idx[v]] : index[res_variables_idx[v]]
+            end
+            for (i,v) in enumerate(s2.variables)
+                idx_s2[i] = v in common_variables_set ? index[res_variables_idx[v]] - I[ranges_idx[v]] : index[res_variables_idx[v]]
+            end
+            res = res ∪ s1.series.get_selfseries_coefficients(idx_s1...) ∪ s2.series.get_selfseries_coefficients(idx_s2...)
+        end
 
-    new_ss = SymbolicSeries(op, new_center)
+
+        res
+    end
+
+    # build resulting SymbolicSeries
+    op = MultilinearSeriesOperation(v -> +(v...), arg, params, ranges)
+    new_ss = SymbolicSeries(op, new_center, get_selfseries_coefficients)
 
     EvaluatedSymbolicSeries(new_ss, res_variables)
 end
@@ -1185,7 +1280,8 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
                                                              s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):end]...]])
                                 , index)
 
-    EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center), s.variables)
+    get_selfseries_coefficients(I::Vararg{Int, D}) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...)
+    EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center, get_selfseries_coefficients), s.variables)
 
 end
 (d::Differential)(a::Array{EvaluatedSymbolicSeries}) = d.(a)
@@ -1252,6 +1348,16 @@ Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "SymbolicSeriesEquatio
 getSymbolics(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getSymbolics(eq.LHS, idx...) ~ getSymbolics(eq.RHS, idx...)
 getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getNum(eq.LHS, idx...) ~ getNum(eq.RHS, idx...)
 
+"""
+    get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D}, I::Vararg{Int, D}) where D
+
+    Retrieves all SeriesCoefficients that refer to :self series in the equation at a given 
+    index I. The output is a Set{SeriesCoefficient}
+"""
+get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D}, I::Vararg{Int, D}) where D =
+    (eq.LHS isa SymbolicSeries ? eq.LHS.get_selfseries_coefficients(I...) : Set()) ∪
+    (eq.RHS isa SymbolicSeries ? eq.RHS.get_selfseries_coefficients(I...) : Set())
+    
 ################################### PDESeries ####################################
 
 """
@@ -1278,7 +1384,10 @@ getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = getNum(eq.L
       equation should be called with to get the equations of a given order N.
       The order of this Vector is the same as the order of the equations Vector.
       For each eq ∈ equations, 
-        * if eq isa Equation, then provide an order for which this equation should be used
+        * if eq isa Equation, then provide a Tuple of 2 elements made of :
+          - N : the order for which this equation should be used
+          - a Vector of the unknown SeriesCoefficient that appear in it.
+          This Vector should only contain SeriesCoefficient of order N 
         * if eq isa SymbolicSeriesEquation, provide a function whose input is an integer N
           representing the order that is being computed and whose output is a Vector of 
           Vector of indices, specified in fullsym format, i.e 
@@ -1311,10 +1420,131 @@ mutable struct PDESeries{T,D} <: PowerSeries{T,D}
                           indices_inference::Vector) where {T}
 
         _size = unknown isa AbstractArray ? size(unknown) : (1,)
-        coefficients = Array{Vector{T}}(undef, _size)
+        coefficients = map(x -> T[], CartesianIndices(_size))
 
         new{T, unknown isa AbstractArray ? ndims(unknown) : 1}(seriesID, _size, variables, 
         center, coefficients, -1, unknown isa AbstractArray ? unknown : [unknown], equations, indices_inference)
     end
 
+end
+
+"""
+    expected_unknowns(K::ScalarSeriesSymbol, D::Int, N::Int)
+
+    Generates the SeriesCoefficients of series K at order N
+
+    ###Input
+
+    - `K::ScalarSeriesSymbol` -- The ScalarSeriesSymbol from which the SeriesCoefficients
+      will be created
+    - `D::Int` -- The number of variables of K
+    - `N::Int` -- The order for which to compute the SeriesCoefficient
+"""
+function expected_unknowns(K::ScalarSeriesSymbol, D::Int, N::Int)
+    indices = generate_trunc_indices(N, D)
+    map(idx -> K[idx...], indices)
+end
+
+expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> expected_unknowns(sss, D, N), K)
+
+"""
+    compute_coefficients!(ps::PDESeries, N::Int; 
+                          solver=symbolic_linear_solve, 
+                          verbose::Int=0)
+
+    Compute coefficients of ps up to order N.
+
+    ###Input
+
+    - `ps::PDESeries` -- the PowerSeries for which the coefficients should be computed
+    - `N::Int` -- the order up to which the coefficients should be computed
+    - `solver=symbolic_linear_solve` -- The solver to be used
+    - `verbose::Int=0` -- 
+      * If verbose ≥ 1, indicates when an order is being computed and
+      when it is done
+      * If verbose ≥ 2, shows the equations and the unknowns for each order
+
+    ###Output
+
+    Stores new coefficients to ps, increases its order and changes the SeriesCoefficient
+    that relate to series :self and whose value have been computed to relate to ps instead
+
+    ###Notes
+
+    - This function provides an additionnal, named argument solver compared to other types
+      of PowerSeries. To compute the coefficients, the PDESeries first expand the equations
+      to the required order before solving them. If wanted, it is possible to change the
+      solver used. In that case, the new solver should take as arguments a Vector of 
+      Equation and a Vector of Num representing the unknown of this system of equations, 
+      and return a Vector of values for each unknown, in the same order as the Vector of 
+      unknowns
+
+    - Since this function changes the PowerSeries the unknown relates to, one should not
+      use the same unknown for different systems of equations. If required, this function
+      and the use of its results can be encapsulated in a let ... end block to bypass this
+      problem 
+"""
+function compute_coefficients!(ps::PDESeries, N::Int; 
+                               solver=Symbolics.symbolic_linear_solve, 
+                               verbose::Int=0)
+
+    if N ≤ ps.order
+        return
+    elseif N > ps.order+1
+        compute_coefficients!(ps, N-1; solver=solver, verbose=verbose)
+    else
+        verbose ≥ 1 && println("Computing coefficients of order $N")
+
+        # first generate all equations and unknowns for order N
+        eqs = Equation[]
+        unknowns = Set()
+        for (eq, idx_inf) in zip(ps.equations, ps.indices_inference)
+            if eq isa Equation
+                if idx_inf[1] == N
+                    push!(eqs, eq)
+                    unknowns = unknowns ∪ Set(idx_inf[2])
+                end
+            else # eq isa SymbolicSeriesEquation
+                expand_for_indices = idx_inf(N)
+                for idx in expand_for_indices
+                    push!(eqs, getNum(eq, idx...))
+                    unknowns = unknowns ∪ get_involved_selfseries_coefficients(eq, idx...)
+                end
+            end
+        end
+
+        # check if unknowns matches the expected unknowns
+        ordered_unknowns = expected_unknowns(ps.scalar_series_ref, length(ps.variables), N)
+        flattened_ordered_unknowns = [ordered_unknowns...;]
+        @assert unknowns == Set(flattened_ordered_unknowns)
+
+        if verbose ≥ 2
+            println("Equations for order $N : ")
+            foreach(eq -> println(eq), eqs)
+            println("To solve with unknowns : ")
+            foreach(unknown -> print("$unknown, "), flattened_ordered_unknowns)
+            println()
+        end
+
+        # solve
+        res = solver(eqs, getSymbolics.(flattened_ordered_unknowns))
+
+        # make room to add new coefficients 
+        number_of_new_coefficients = length(ordered_unknowns[1])
+        old_length = length(ps.coefficients[1])
+        new_length = old_length + number_of_new_coefficients
+        foreach(idx -> resize!(ps.coefficients[idx], new_length), eachindex(ps.coefficients))
+
+        # fill in with the new coefficients
+        for (sc, val) in zip(flattened_ordered_unknowns, res)
+            @show typeof(val)
+            ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] # = val
+            sc.ps = ps
+        end
+
+        # update order
+        ps.order = N
+        
+        verbose ≥ 1 && println("Coefficients computed up to order $N")
+    end
 end

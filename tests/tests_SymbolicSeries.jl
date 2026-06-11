@@ -48,3 +48,6 @@ test1_ss = SymbolicSeries(test1_ts)
 @test getNum(test1_ss(x, z, z)[0,1]) ≈ 1
 @test getNum(test1_ss(x, y, x)[1,0]) ≈ 2
 @test getNum(test1_ss(x, y, x)[1,1]) ≈ 5
+
+@test (K_ss[1,1]*K_ss[1,2]).get_selfseries_coefficients(2) == Set([K_ss[1,1][0], K_ss[1,1][1], K_ss[1,1][2],
+                                                                  K_ss[1,2][0], K_ss[1,2][1], K_ss[1,2][2]])
