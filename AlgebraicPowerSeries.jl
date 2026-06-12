@@ -689,6 +689,10 @@ function SymbolicSeries(ps::PowerSeries)
     length(a) == 1 ? SymbolicSeries(a[1], ps.center) : SymbolicSeries(a, ps.center)
 end
 
+# used for addition of constants
+SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D)), zeros(D), I::Vararg{Int, D} -> Set())
+Base.convert(::Type{SymbolicSeries{D}}, x::Number) where D = SymbolicSeries{D}(x)
+
 function Base.show(io::IO, s::SymbolicSeries)
     if s.ref isa ScalarSeriesSymbol
         if s.ref.ps isa PowerSeries
@@ -786,6 +790,9 @@ getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s
 """
 getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getNum(s[idx...])
 
+Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries(NlinearSeriesOperation(x -> 0, []), zeros(D), I::Vararg{Int, D} -> Set())
+Base.zero(::SymbolicSeries{D}) where D = Base.zero(SymbolicSeries{D})
+
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     s1.center != s2.center && throw(ArgumentError("Can only add SymbolicSeries that have the \
                                                    same centers"))
@@ -793,12 +800,18 @@ function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
+Base.:+(s::SymbolicSeries{D}, x::Number) where D = s + SymbolicSeries{D}(x)
+Base.:+(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) + s
+
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the \
                                                    same centers"))
     op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2])
     SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
+
+Base.:-(s::SymbolicSeries{D}, x::Number) where D = s - SymbolicSeries{D}(x)
+Base.:-(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) - s
 
 """
     Base.:*(t::Number, s::SymbolicSeries)
@@ -1050,7 +1063,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Union{Num, Symbol, AbstractFloat, Int
     s(new_vars...)
 end
 
-function (a::Array{SymbolicSeries})(at::Vararg)::Array{EvaluatedSymbolicSeries} where {SymbolicSeries}
+function (a::Array{<:SymbolicSeries})(at::Vararg)::Array{EvaluatedSymbolicSeries}
     map(s -> s(at...), a)
 end
 
@@ -1058,6 +1071,7 @@ Base.show(io::IO, ess::EvaluatedSymbolicSeries) = print(io, "$(ess.series)($(["$
 
 Base.getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}) where D = ess.series[I...]
 
+Base.zero(ess::EvaluatedSymbolicSeries) = Base.zero(ess.series)(ess.variables...)
 
 """
     Base.:+(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
@@ -1068,8 +1082,6 @@ Base.getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}) where D = ess.
     the order of s1 is kept
 """
 function Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D
-    isequal(Set(s1.variables), Set(s2.variables)) || throw(ArgumentError("Can only add SymbolicSeries \
-                                                         evaluated in the same variables"))
     # if necessary, swap indices of s2
     var_idx = Dict([v => i for (i,v) in enumerate(s1.variables)])
     index = generate_index_list(length(s1.variables))
@@ -1080,6 +1092,10 @@ function Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D})
     EvaluatedSymbolicSeries(s1.series + new_s2series, s1.variables)
 end
 
+Base.:+(s1::SymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D = s1(s2.variables...) + s2
+Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::SymbolicSeries{D}) where D = s1 + s2(s1.variables...)
+Base.:+(s::EvaluatedSymbolicSeries{D}, x::Number) where D = s + (SymbolicSeries{D}(x))(s.variables...)
+Base.:+(x::Number, s::EvaluatedSymbolicSeries{D}) where D = (SymbolicSeries{D}(x))(s.variables...) + s
 
 """
     Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
@@ -1102,6 +1118,11 @@ function Base.:-(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D})
 
     EvaluatedSymbolicSeries(s1.series - new_s2series, s1.variables)
 end
+
+Base.:-(s1::SymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D = s1(s2.variables...) - s2
+Base.:-(s1::EvaluatedSymbolicSeries{D}, s2::SymbolicSeries{D}) where D = s1 - s2(s1.variables...)
+Base.:-(s::EvaluatedSymbolicSeries{D}, x::Number) where D = s - (SymbolicSeries{D}(x))(s.variables...)
+Base.:-(x::Number, s::EvaluatedSymbolicSeries{D}) where D = (SymbolicSeries{D}(x))(s.variables...) - s
 
 """
     Base.:*(t::Number, s::EvaluatedSymbolicSeries)
@@ -1236,6 +1257,7 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
     EvaluatedSymbolicSeries(new_ss, res_variables)
 end
 
+
 function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
     # TODO : make it possible to return null series
     any([isequal(v, d.x) for v in s.variables]) || throw(ArgumentError("Trying to differentiate in variable $(d.x) \
@@ -1292,8 +1314,8 @@ end
       for EvaluatedSymbolicSeries 
 """
 struct SymbolicSeriesEquation{D}
-    LHS::Union{SymbolicSeries{D}, Number}
-    RHS::Union{SymbolicSeries{D}, Number}
+    LHS::SymbolicSeries{D}
+    RHS::SymbolicSeries{D}
 end
 
 function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D}, Number}, 
@@ -1312,8 +1334,8 @@ function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D}, Number},
         
         SymbolicSeriesEquation(LHS.series, new_RHSseries)
     else
-        SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : LHS, 
-                               RHS isa EvaluatedSymbolicSeries ? RHS.series : RHS)
+        SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : SymbolicSeries{D}(LHS), 
+                               RHS isa EvaluatedSymbolicSeries ? RHS.series : SymbolicSeries{D}(RHS))
     end
 end
 
@@ -1532,4 +1554,6 @@ function compute_coefficients!(ps::PDESeries, N::Int;
     ps.order = N
         
     verbose ≥ 1 && println("Coefficients computed up to order $N")
+
+    return
 end

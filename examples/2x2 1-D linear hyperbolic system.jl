@@ -4,212 +4,170 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ c676d3ac-ef7b-47f2-b4ac-99f56ddd93d8
 begin
-	import Pkg
-	Pkg.add("Symbolics")
-end; nothing
+	import Pkg;
+	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
+end
 
-# ╔═╡ 5ad1546c-1481-42e2-8b99-db808eea7768
-using Symbolics
-
-# ╔═╡ 34c18021-d9bf-42d8-a9ba-001682b2cee5
+# ╔═╡ 9df7d598-6c81-4fa4-97e2-fe031e0ae1d5
 using GLMakie
 
-# ╔═╡ 4c1068dd-466a-4b9f-b37f-14c30e381571
-include("../AlgebraicPowerSeries.jl"); nothing
+# ╔═╡ 34c18021-d9bf-42d8-a9ba-001682b2cee5
+using Symbolics
+
+# ╔═╡ 9f9fd667-d45c-483b-af9a-393fe0ca3952
+using PlutoUI
+
+# ╔═╡ 5ad1546c-1481-42e2-8b99-db808eea7768
+include("../AlgebraicPowerSeries.jl"); nothing;
 
 # ╔═╡ b34ceca0-58f9-11f1-9c39-fd7d92bf34d9
 md"""
 # Imports
 """
 
-# ╔═╡ 9df7d598-6c81-4fa4-97e2-fe031e0ae1d5
+# ╔═╡ 4c1068dd-466a-4b9f-b37f-14c30e381571
 import Latexify
 
 # ╔═╡ 99f61bb3-47ef-49e0-8e4e-e25bed05c5c6
 md"""
-# Computing coefficients
-"""
-
-# ╔═╡ 089778d9-8560-49b8-8c3a-853df5536cfb
-md"""
-##### Defining variables and indices
+# Variables
 """
 
 # ╔═╡ 838b2173-6a55-4eb1-8a08-7cd98552d780
 @variables x y
 
 # ╔═╡ 23cfd29e-4cd9-49a0-ba93-338ed60b4e57
-@variables i j k
+∂x, ∂y = Differential(x), Differential(y)
 
 # ╔═╡ 902b946a-a877-42b3-8c18-81a4fc9a4262
 md"""
-##### Parameters
+# Parameters
 """
 
 # ╔═╡ fa0e5bce-5ba3-4833-aed5-545e31d166de
-N = 30 # order
+@bind N PlutoUI.Slider(0:100; default=30, show_value=N -> "Order : N=$N")
 
 # ╔═╡ c26326ea-ad12-4f6c-9dac-40bb68133c7f
-q = 1
-
-# ╔═╡ be9ce343-7f72-48e6-8661-0a6a4c2c77f1
-md"""
-##### Σ function
-"""
+q = 1; nothing
 
 # ╔═╡ def0ec8e-e807-469d-b10f-425b56720a86
 begin
-	Σ = TaylorExpansionSeries{Float64}(:Σ, [x], [1.2+x^3;0;;0;1.5+x^2], [0])
-	compute_coefficients!(Σ, N+1); 
+	Σ_ps = TaylorExpansionSeries{Float64}(:Σ, [x], [1.2+x^3;0;;0;1.5+x^2], [0])
+	compute_coefficients!(Σ_ps, N+1); 
+	Σ = SymbolicSeries(Σ_ps)
 end; nothing
-
-# ╔═╡ c47fa1af-af58-4b85-84ae-3d01c64a0b4a
-md"""
-##### C function
-"""
 
 # ╔═╡ 9cd56389-61d8-4641-828a-b46180e8e891
 begin
-	C = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(x);1+2*exp(x);;sin(2*x);1/(3+x^2)], [0])
-	compute_coefficients!(C, N)
+	C_ps = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(x);1+2*exp(x);;sin(2*x);1/(3+x^2)], [0])
+	compute_coefficients!(C_ps, N)
+	C = SymbolicSeries(C_ps)
+	C₀ = SymbolicSeries{1}[C[1,1];0;;0;C[2,2]]
 end; nothing
 
-# ╔═╡ 0527f200-18c8-4098-b3ce-9dfaf7fb92ae
+# ╔═╡ b4754ecb-8a1e-40b1-b30e-bca5592e7753
 md"""
-##### kernel representation
+# PDE and boundary conditions
 """
 
-# ╔═╡ 7cb2c546-9353-49a4-a14a-413d8c8dbdbe
-K = selfseries_symbols(2,2); nothing
+# ╔═╡ 8a621f6e-8e1a-4789-8a2d-65a0a3693547
+unknowns = selfseries_symbols(2,2); nothing
 
-# ╔═╡ 73949d4a-9e28-4045-8977-c45fc17329ad
+# ╔═╡ a301356b-432d-4528-85d0-56b207123a12
+K = SymbolicSeries(unknowns, [0,0]); nothing
+
+# ╔═╡ 79f8a834-6e59-4981-ad74-534429b26f99
 md"""
-##### Relations of recurrence
+### PDEs
 """
 
-# ╔═╡ 2339fa53-55c3-47a5-8e67-4bcfe54ed54d
+# ╔═╡ baef7a66-c86b-459e-a187-fecf1a43c059
+PDEs = Σ(x)*∂x(K(x,y)) + ∂y(K(x,y))*Σ(y) .~ K(x,y)*(C(y)-∂y(Σ(y))) - C₀(x)*K(x,y)
+
+# ╔═╡ 2e81893c-0de6-403f-8b15-72b6c46fadf6
 md"""
-###### First relation
+### Boundary conditions
 """
 
-# ╔═╡ 89fab97f-7a50-4319-aa4b-27af5a1d6ae5
-begin
-	R11 = @recurrent_relation K[1,1][i,0] ~ Σ[2,2][0]/(q*Σ[1,1][0])*K[1,2][i,0] i in 0:(:∞)
-	R12 = @recurrent_relation K[2,1][i,0] ~ Σ[2,2][0]/(q*Σ[1,1][0])*K[2,2][i,0] i in 0:(:∞)
-end; nothing
+# ╔═╡ b1569d5a-ba7e-4358-9f4f-f75417fdbeb8
+BC1 = K(x,x)*Σ(x) - Σ(x)*K(x,x) .~ C(x) - C₀(x)
 
-# ╔═╡ 7201eee7-96a2-4d9f-ae5d-3326017be86c
+# ╔═╡ ac06dd23-4105-4a28-8517-badfc47b64f8
+BC2 = K(x,0)*Σ(0)*[q, 1] .~ 0
+
+# ╔═╡ 980fd8df-4003-400e-a96c-6199f855158e
 md"""
-###### Second relation
+# Computing the coefficients up to order N
 """
 
-# ╔═╡ 0d8b4e73-b99c-4ecd-a38a-3005450aa69c
-begin
-	R21 = @recurrent_relation (@∑ K[1,2][k,j]*(Σ[1,1][i-k]+Σ[2,2][i-k]) j in 0:k k in 0:i) ~  C[1,2][i] i in 0:(:∞)
-	R22 = @recurrent_relation (@∑ K[2,1][k,j]*(Σ[1,1][i-k]+Σ[2,2][i-k]) j in 0:k k in 0:i) ~ -C[2,1][i] i in 0:(:∞)
-end; nothing
+# ╔═╡ 3bbd8ae7-0f9d-41bb-b860-f2e0b982bafa
+getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []; nothing
 
-# ╔═╡ 2f923e1d-7945-4ce4-a785-d86fa3b272ed
+# ╔═╡ 44a14064-22fb-453f-996c-65aabac1b994
+K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknowns, [BC1...; BC2...; PDEs...;], [N -> [], N -> [N], N -> [N], N -> [], N -> [N], N -> [N], getindices, getindices, getindices, getindices])
+
+# ╔═╡ 505d68b5-1b8c-4e87-bc17-24deff01e5dc
+compute_coefficients!(K_ps, N)
+
+# ╔═╡ a44f22da-e181-4cd3-a04e-de3b050767ab
 md"""
-###### Third relation
+# Analyzing the results
 """
 
-# ╔═╡ 5894eeff-f2eb-4f3a-8976-5fb74a145fc0
-begin
-	R31 = @recurrent_relation(
-			  (@∑ (k+1)*K[1,1][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j)) 
-			+ (@∑ (k+1)*K[1,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~   
-			- (@∑ (j-k+1)*K[1,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) 
-			- (@∑ K[1,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) 
-			+ (@∑ K[1,1][k+j,j]*C[1,1][i-1-j-k] k in 0:(i-1-j))
-			- (@∑ K[1,1][i-1-j+k,k]*C[1,1][j-k] k in 0:j),
-			j in 0:(i-1), i in 0:(:∞)
-		)
-	R32 = @recurrent_relation(
-		      (@∑ (k+1)*K[1,2][k+j+1,j]*Σ[1,1][i-1-j-k] k in 0:(i-1-j))
-		    - (@∑ (k+1)*K[1,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~  
-			  (@∑ (j-k+1)*K[1,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) 
-			- (@∑ K[1,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) 
-			+ (@∑ K[1,2][k+j,j]*C[1,1][i-1-j-k] k in 0:(i-1-j))
-			- (@∑ K[1,2][i-1-j+k,k]*C[2,2][j-k] k in 0:j),
-			j in 0:(i-1), i in 0:(:∞)
-		)
-	R33 = @recurrent_relation(
-			  (@∑ (k+1)*K[2,1][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) 
-			- (@∑ (k+1)*K[2,1][i-1-j+k+1,k+1]*Σ[1,1][j-k] k in 0:j) ~  
-			  (@∑ (j-k+1)*K[2,1][i-1-j+k,k]*Σ[1,1][j-k+1] k in 0:j) 
-			+ (@∑ K[2,2][i-1-j+k,k]*C[2,1][j-k] k in 0:j) 
-			- (@∑ K[2,1][k+j,j]*C[2,2][i-1-j-k] k in 0:(i-1-j))
-			+ (@∑ K[2,1][i-1-j+k,k]*C[1,1][j-k] k in 0:j),
-			j in 0:(i-1), i in 0:(:∞)
-		) 
-	R34 = @recurrent_relation(
-			  (@∑ (k+1)*K[2,2][k+j+1,j]*Σ[2,2][i-1-j-k] k in 0:(i-1-j)) 
-			+ (@∑ (k+1)*K[2,2][i-1-j+k+1,k+1]*Σ[2,2][j-k] k in 0:j) ~ 
-			- (@∑ (j-k+1)*K[2,2][i-1-j+k,k]*Σ[2,2][j-k+1] k in 0:j) 
-			+ (@∑ K[2,1][i-1-j+k,k]*C[1,2][j-k] k in 0:j) 
-			- (@∑ K[2,2][k+j,j]*C[2,2][i-1-j-k] k in 0:(i-1-j))
-			+ (@∑ K[2,2][i-1-j+k,k]*C[2,2][j-k] k in 0:j),
-			j in 0:(i-1), i in 0:(:∞)
-		)
-end; nothing
+# ╔═╡ 993eaaab-6e9a-4af2-a5ed-3f19a77fb42d
+orders = [15, 20, 25, 30]; nothing
 
-# ╔═╡ ebf696cb-3e04-4ead-b5fa-23c0991a8eb1
-md"""
-###### Series definition and computation
-"""
+# ╔═╡ a2269f12-b655-4a7f-9b8f-5ca20cbecb11
+y_range = 0:0.01:1; nothing
 
-# ╔═╡ 8009dbf2-4d50-4640-a22b-8c62cd841be3
-begin
-	rs = RecurrentSeries{Float64}(:crs, (2,2), [x,y], [0,0], [R11, R12, R21, R22, R31, R32, R33, R34])
-	compute_coefficients!(rs, N)
-end
-
-# ╔═╡ c30e52dd-444e-43a3-bbb3-2b25b63311af
-md"""
-# Study of the series' convergence
-"""
-
-# ╔═╡ c191ce94-7a8a-4791-8449-cba849cc74ed
-orders = [15, 20, 25, 30]
-
-# ╔═╡ 4a36eaa3-93b9-4f58-a522-a17ea2566801
-funcs = [ω -> build(rs, o)(1, ω) for o in orders]; nothing
-
-# ╔═╡ d6e8bddc-851c-4195-994e-c8511ed27d82
+# ╔═╡ a7d8d4f1-8b87-4ec8-8e81-4372f91e4162
 begin 
-	fig = Figure()
-	axs = Matrix{Axis}(undef, 2,2)
-	labels = ["Kᵘᵘ"; "Kᵛᵘ";; "Kᵘᵛ"; "Kᵛᵛ"]
-	for i in axes(axs, 1), j in axes(axs, 2)
-		axs[i,j] = Axis(fig[i,j]; xlabel="x", title="$(labels[i,j])(1,y)")
+	Ks = []
+	for order in orders
+		K_at_order = build_matrix_elt(K_ps, order)
+		boundary_K = Matrix{Any}(undef, 2,2)
+		for i in 1:2, j in 1:2
+			Kˣˣ(y) = K_at_order[i,j](1,y)
+			boundary_K[i,j] = Kˣˣ
+		end
+		push!(Ks, boundary_K)
 	end
 end
 
-# ╔═╡ f325fa04-1623-4a9d-9ad2-aed7557c7f4d
-range = 0:0.05:1
+# ╔═╡ a8eb1972-97b6-486e-8f14-a49bcfecfed4
+fig = Figure(); nothing
 
-# ╔═╡ 45b0e870-9d85-486e-841b-0dfc0da5655c
-begin
-	data = []
-	for func in funcs
-		push!(data, stack(func.(range), dims=3))
+# ╔═╡ 81198cfe-3f86-438a-9bc3-95c4bf9b431d
+labels = ["Kᵘᵘ(1,y)"; "Kᵛᵘ(1,y)";; "Kᵘᵛ(1,y)"; "Kᵛᵛ(1,y)"]; nothing
+
+# ╔═╡ 23c47864-c772-45a7-a7ec-d7b3355bead9
+axs = map(t -> Axis(fig[t[1],t[2]]; title="$(labels[t[1],t[2]]) for different values of N"), CartesianIndices((1:2, 1:2))); nothing
+
+# ╔═╡ 692944ca-e7a4-4355-b054-572fef0b7bf7
+for (order, K_array) in zip(orders, Ks)
+	for i in 1:2, j in 1:2
+		lines!(axs[i,j], y_range, K_array[i,j].(y_range); label="N=$order")
 	end
 end
 
-# ╔═╡ 85fecc9a-a450-49c3-b426-d83d965d26ef
-for (d,order) in zip(data,orders)
-	for i in axes(axs, 1), j in axes(axs, 2)
-		lines!(axs[i,j], range, d[i,j,:]; label="N=$order")
-	end
-end
-
-# ╔═╡ f183a7c4-baaa-494f-9c9a-d944617b273d
+# ╔═╡ 16a1886d-ced9-4d7a-a7cc-88bcdfdd3770
 foreach(ax -> axislegend(ax; position=:rt), axs)
 
-# ╔═╡ 12b0551e-c67a-485b-80e0-6d00e91bf853
+# ╔═╡ f37a2344-b532-4fa9-8002-90da20a98451
 display(fig)
 
 # ╔═╡ Cell order:
@@ -219,34 +177,34 @@ display(fig)
 # ╠═4c1068dd-466a-4b9f-b37f-14c30e381571
 # ╠═9df7d598-6c81-4fa4-97e2-fe031e0ae1d5
 # ╠═34c18021-d9bf-42d8-a9ba-001682b2cee5
+# ╠═9f9fd667-d45c-483b-af9a-393fe0ca3952
 # ╟─99f61bb3-47ef-49e0-8e4e-e25bed05c5c6
-# ╟─089778d9-8560-49b8-8c3a-853df5536cfb
 # ╠═838b2173-6a55-4eb1-8a08-7cd98552d780
 # ╠═23cfd29e-4cd9-49a0-ba93-338ed60b4e57
 # ╟─902b946a-a877-42b3-8c18-81a4fc9a4262
-# ╠═fa0e5bce-5ba3-4833-aed5-545e31d166de
+# ╟─fa0e5bce-5ba3-4833-aed5-545e31d166de
 # ╠═c26326ea-ad12-4f6c-9dac-40bb68133c7f
-# ╟─be9ce343-7f72-48e6-8661-0a6a4c2c77f1
 # ╠═def0ec8e-e807-469d-b10f-425b56720a86
-# ╟─c47fa1af-af58-4b85-84ae-3d01c64a0b4a
 # ╠═9cd56389-61d8-4641-828a-b46180e8e891
-# ╟─0527f200-18c8-4098-b3ce-9dfaf7fb92ae
-# ╠═7cb2c546-9353-49a4-a14a-413d8c8dbdbe
-# ╟─73949d4a-9e28-4045-8977-c45fc17329ad
-# ╟─2339fa53-55c3-47a5-8e67-4bcfe54ed54d
-# ╠═89fab97f-7a50-4319-aa4b-27af5a1d6ae5
-# ╟─7201eee7-96a2-4d9f-ae5d-3326017be86c
-# ╠═0d8b4e73-b99c-4ecd-a38a-3005450aa69c
-# ╟─2f923e1d-7945-4ce4-a785-d86fa3b272ed
-# ╠═5894eeff-f2eb-4f3a-8976-5fb74a145fc0
-# ╟─ebf696cb-3e04-4ead-b5fa-23c0991a8eb1
-# ╠═8009dbf2-4d50-4640-a22b-8c62cd841be3
-# ╟─c30e52dd-444e-43a3-bbb3-2b25b63311af
-# ╠═c191ce94-7a8a-4791-8449-cba849cc74ed
-# ╠═4a36eaa3-93b9-4f58-a522-a17ea2566801
-# ╠═d6e8bddc-851c-4195-994e-c8511ed27d82
-# ╠═f325fa04-1623-4a9d-9ad2-aed7557c7f4d
-# ╠═45b0e870-9d85-486e-841b-0dfc0da5655c
-# ╠═85fecc9a-a450-49c3-b426-d83d965d26ef
-# ╠═f183a7c4-baaa-494f-9c9a-d944617b273d
-# ╠═12b0551e-c67a-485b-80e0-6d00e91bf853
+# ╟─b4754ecb-8a1e-40b1-b30e-bca5592e7753
+# ╠═8a621f6e-8e1a-4789-8a2d-65a0a3693547
+# ╠═a301356b-432d-4528-85d0-56b207123a12
+# ╟─79f8a834-6e59-4981-ad74-534429b26f99
+# ╠═baef7a66-c86b-459e-a187-fecf1a43c059
+# ╟─2e81893c-0de6-403f-8b15-72b6c46fadf6
+# ╠═b1569d5a-ba7e-4358-9f4f-f75417fdbeb8
+# ╠═ac06dd23-4105-4a28-8517-badfc47b64f8
+# ╟─980fd8df-4003-400e-a96c-6199f855158e
+# ╠═3bbd8ae7-0f9d-41bb-b860-f2e0b982bafa
+# ╠═44a14064-22fb-453f-996c-65aabac1b994
+# ╠═505d68b5-1b8c-4e87-bc17-24deff01e5dc
+# ╟─a44f22da-e181-4cd3-a04e-de3b050767ab
+# ╠═993eaaab-6e9a-4af2-a5ed-3f19a77fb42d
+# ╠═a2269f12-b655-4a7f-9b8f-5ca20cbecb11
+# ╠═a7d8d4f1-8b87-4ec8-8e81-4372f91e4162
+# ╠═a8eb1972-97b6-486e-8f14-a49bcfecfed4
+# ╠═81198cfe-3f86-438a-9bc3-95c4bf9b431d
+# ╠═23c47864-c772-45a7-a7ec-d7b3355bead9
+# ╠═692944ca-e7a4-4355-b054-572fef0b7bf7
+# ╠═16a1886d-ced9-4d7a-a7cc-88bcdfdd3770
+# ╠═f37a2344-b532-4fa9-8002-90da20a98451
