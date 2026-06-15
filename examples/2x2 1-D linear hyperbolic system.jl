@@ -121,7 +121,7 @@ getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []; nothing
 K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknowns, [BC1...; BC2...; PDEs...;], [N -> [], N -> [N], N -> [N], N -> [], N -> [N], N -> [N], getindices, getindices, getindices, getindices])
 
 # ╔═╡ 505d68b5-1b8c-4e87-bc17-24deff01e5dc
-compute_coefficients!(K_ps, N)
+compute_coefficients!(K_ps, N; verbose=2)
 
 # ╔═╡ a44f22da-e181-4cd3-a04e-de3b050767ab
 md"""
