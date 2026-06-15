@@ -1259,9 +1259,7 @@ end
 
 
 function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
-    # TODO : make it possible to return null series
-    any([isequal(v, d.x) for v in s.variables]) || throw(ArgumentError("Trying to differentiate in variable $(d.x) \
-                                                                        which is not amongst the variables of $s"))
+    any([isequal(v, d.x) for v in s.variables]) || return zero(s)
 
     # find variable index
     x_idx = findfirst(v -> isequal(v, d.x), s.variables)
@@ -1278,12 +1276,36 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
     EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center, get_selfseries_coefficients), s.variables)
 
 end
-(d::Differential)(a::Array{EvaluatedSymbolicSeries}) = d.(a)
+(d::Differential)(a::Array{<:EvaluatedSymbolicSeries}) = d.(a)
 
+"""
+    ∫(s::EvaluatedSymbolicSeries, x)
 
+    Integrate s with respect to x (new constant coefficient is zero), meaning the
+    integration is done from s center to x.
 
-# TODO : make it possible to define PowerSeries with a function of N and previously 
-# computed orders
+    Throws an error if x is not one of s variables
+"""
+function ∫(s::EvaluatedSymbolicSeries, x)
+    any([isequal(v, x) for v in s.variables]) || throw(ArgumentError("$x is not a variable of $s. Available variables are : $(s.variables)"))
+
+    # find variable index
+    x_idx = findfirst(v -> isequal(v, d.x), s.variables)
+
+    # create index
+    index = generate_index_list(D)
+
+    op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1] == 0 ? 0 : v[2]/v[1], 
+                                                            [u[x_idx], 
+                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end]...]])
+                                , index)
+
+    get_selfseries_coefficients(I::Vararg{Int, D}) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...)
+    EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center, get_selfseries_coefficients), s.variables)
+
+end
+∫(a::Array{<:EvaluatedSymbolicSeries}, x) = map(s -> ∫(s, x), a)
+
 
 ################################ SymbolicSeriesEquation #############################
 
