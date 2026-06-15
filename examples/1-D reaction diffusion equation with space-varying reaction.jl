@@ -4,243 +4,192 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ c4c15963-07ad-4543-8b52-928616dd2f6a
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
+# ╔═╡ 96582742-0d69-47a1-bce6-5672385e4bb7
 begin
-	import Pkg
-	Pkg.add("Symbolics")
-end; nothing
+	import Pkg;
+	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
+end
 
-# ╔═╡ 6a9b9b8e-515d-432b-95c2-bbff42229160
-using Symbolics
-
-# ╔═╡ 3af727a8-eab5-41ab-bd79-27903e3c3f53
+# ╔═╡ c481d149-fcb1-4e31-96ed-64abfd3704ea
 using GLMakie
 
-# ╔═╡ be8ecdad-3bf0-49b9-a046-3539850e74a0
-include("../AlgebraicPowerSeries.jl"); nothing
+# ╔═╡ 61f3d5e2-45a2-40f1-bf23-b4dfacf7f0e3
+using Symbolics
+
+# ╔═╡ 527a13c9-61df-4f50-9179-e551218fc04d
+using PlutoUI
+
+# ╔═╡ ed023b55-5dd6-437c-8ff9-a83c471e1361
+include("../AlgebraicPowerSeries.jl"); nothing;
 
 # ╔═╡ 776674bd-e446-4286-b6cf-643e0e9f1e5b
 md"""
 # Imports
 """
 
-# ╔═╡ d5e314ff-ec78-4308-8ddf-56c5475c68d2
+# ╔═╡ 243d9572-93af-4a74-bbe2-b260214cff31
 import Latexify
 
 # ╔═╡ 06d7d816-5bb2-4457-97cc-7d6b72524111
 md"""
-# Computing coefficients
-"""
-
-# ╔═╡ 2518dedd-3ddc-4cf0-a2bd-02cbb9eb05a6
-md"""
-##### Defining variables and indices
+# Variables
 """
 
 # ╔═╡ b69c5445-4d87-4986-bfcf-1309079bc36d
-@variables x y
+@variables x y; nothing
 
-# ╔═╡ 2b4329bb-6088-4b2b-ba38-2e25e05845dc
-@variables i j k
+# ╔═╡ f3fa85ca-9d58-401f-83ec-4e2f68584436
+∂²x, ∂²y = Differential(x)^2, Differential(y)^2; nothing
 
 # ╔═╡ 3c8656ed-1fba-4d7d-bc05-bec290b2529a
 md"""
-##### Parameters
+# Parameters
 """
 
 # ╔═╡ c00635e2-6915-4dbf-8675-ba16645f8182
-N = 25 # order
+@bind N PlutoUI.Slider(0:100; default=25, show_value=N -> "Order : N=$N")
+
+# ╔═╡ 08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
+c = 3; nothing
+
+# ╔═╡ 7636cea2-c846-4c71-bba7-7168ef006283
+ε = 1; nothing
 
 # ╔═╡ d1504ce0-6b32-488b-9392-ba824b979c8e
 begin
-	∑λᵢ = TaylorExpansionSeries{Float64}(:lambda, [x], [6 + x^2*sin(3*x)], [0])
-	compute_coefficients!(∑λᵢ, N)
-end
+	λ_ps = TaylorExpansionSeries{Float64}(:lambda, [x], [3 + x^2*sin(3*x)], [0])
+	compute_coefficients!(λ_ps, N)
+	λ = SymbolicSeries(λ_ps)
+end; nothing
 
 # ╔═╡ e683d8aa-5c46-4eaf-8ae8-045fdd6cc7a2
 md"""
-##### Kernel computation
+# PDE and boundary conditions
 """
 
-# ╔═╡ 116e569f-fa07-4f59-b78d-a6aa761c3f36
-begin 
-	@variables Kᵢ₀ Kᵢⱼ Kᵢ₍ⱼ₊₂₎ Kₖⱼ
-	@variables λᵢ₋₁ λᵢ₋₂₋ₖ
-	@variables Σⱼ₌₀ⁱKᵢⱼ B₍ᵢ₋₂₎ⱼ
-end; nothing
+# ╔═╡ 467f87c5-4f6d-4466-a53a-fe231f16e0d1
+unknown = selfseries_symbols(); nothing
 
-# ╔═╡ df0df352-1c0c-49ce-9c3f-eccc53637faf
-begin 
-	sc_Kᵢ₀     = SeriesCoefficient(:self, Kᵢ₀, [i,0], [i], (1,))
-	sc_Kᵢⱼ     = SeriesCoefficient(:self, Kᵢⱼ, [i,j], [i,j], (1,))
-	sc_Kᵢ₍ⱼ₊₂₎ = SeriesCoefficient(:self, Kᵢ₍ⱼ₊₂₎, [i,j+2], [i,j], (1,))
-	sc_Kₖⱼ     = SeriesCoefficient(:self, Kₖⱼ, [k,j], [k,j], (1,))
+# ╔═╡ 61a0b5b2-2a67-4322-af15-46d961b21cf8
+K = SymbolicSeries(unknown, [0,0]); nothing
 
-	sc_λᵢ₋₁ = SeriesCoefficient(∑λᵢ, λᵢ₋₁, [i-1], [i], (1,))
-	sc_λᵢ₋₂₋ₖ = SeriesCoefficient(∑λᵢ, λᵢ₋₂₋ₖ, [i-2-k], [i,k], (1,))
-end; nothing
-
-# ╔═╡ 0b60f870-f16f-426a-a7e4-38c06d44440c
+# ╔═╡ 00de77c1-e8f0-428b-a327-6f5af696aab9
 md"""
-###### First relation
+### Boundary conditions
 """
 
-# ╔═╡ 278cc95e-bb7c-47f6-ac93-47de6964df2e
-R1 = RecurrentRelation(Kᵢ₀ ~ 0, [i], [(0,:∞)], [sc_Kᵢ₀], []); nothing
+# ╔═╡ cae5baf9-4623-4feb-ac37-0455552f45c1
+BC1 = K(x,0) ~ 0; nothing
 
-# ╔═╡ d48fce35-639a-4785-9c52-63e961330c05
+# ╔═╡ b38b0c10-ffa6-4a39-8828-805bd701c393
+BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ(x) + c, x); nothing
+
+# ╔═╡ 18f8860c-b213-4545-a1c6-b15a67998834
 md"""
-###### Second relation
+### PDE
 """
 
-# ╔═╡ 297c70be-ce17-4cac-8dfd-27dc4c06a03e
-sum(formulae::Vector) = +(formulae...)
+# ╔═╡ 09f4e5a7-aad0-41e0-be20-7658a390835e
+PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ(y)+c)/ε * K(x,y); nothing
 
-# ╔═╡ 4fac33d3-c70a-4d4f-bb9c-1d2b35b476f5
-ef_Σⱼ₌₀ⁱKᵢⱼ = ExpandableFormula(:Σⱼ₌₀ⁱKᵢⱼ, Σⱼ₌₀ⁱKᵢⱼ, Kᵢⱼ, [i], [j], [(0,i)], [], [sc_Kᵢⱼ], sum); nothing
-
-# ╔═╡ 11fb4468-c439-40d0-99ff-1445a0b10094
-R2 = RecurrentRelation(Σⱼ₌₀ⁱKᵢⱼ ~ -λᵢ₋₁/(2*i), [i], [(1,:∞)], [sc_λᵢ₋₁], [ef_Σⱼ₌₀ⁱKᵢⱼ]); nothing
-
-
-# ╔═╡ bd3f2ffb-a7c4-409c-ab0d-eaaee537ce24
+# ╔═╡ 7a1b11be-ff45-4c2f-aa61-a7dfdb80b425
 md"""
-###### Third relation
+# Computing the coefficients up to order N
 """
 
-# ╔═╡ db4c3485-9a1d-4281-ae55-d681b9599c1f
-ef_B₍ᵢ₋₂₎ⱼ = ExpandableFormula(:B₍ᵢ₋₂₎ⱼ , B₍ᵢ₋₂₎ⱼ, Kₖⱼ*λᵢ₋₂₋ₖ, [i,j], [k], [(j,i-2)], [], [sc_Kₖⱼ,sc_λᵢ₋₂₋ₖ], sum); nothing
+# ╔═╡ db8468ed-d28f-4a84-a84a-41c791a689a9
+getindices(N) = N ≥ 2 ? generate_fullsym_indices(N-2, 2) : []; nothing
 
-# ╔═╡ 4a420f7a-3008-42a1-a30e-b9ce0f858fad
-R3 = RecurrentRelation((i-j)*(i-j-1)*Kᵢⱼ - (j+2)*(j+1)*Kᵢ₍ⱼ₊₂₎ ~ B₍ᵢ₋₂₎ⱼ, [i,j], 
-                       [(2,:∞),(0,i-2)], [sc_Kᵢⱼ, sc_Kᵢ₍ⱼ₊₂₎], [ef_B₍ᵢ₋₂₎ⱼ]); nothing
+# ╔═╡ 6ffa8c0a-7b54-4466-80dd-80a553729152
+K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknown, [BC1, BC2, PDE], [N -> [N], N -> N ≥ 1 ? [N] : [], getindices])	
 
-# ╔═╡ 679c481c-0697-4d35-992b-531a68a6d694
-md"""
-###### Series definition and computation
-"""
-
-# ╔═╡ 1db49b0a-ecae-4d99-bd2d-4abec3fe79a6
-begin
-	rs = RecurrentSeries{Float64}(:K, (1,), [x,y], [0,0], [R1, R2, R3])
-	compute_coefficients!(rs, N)
-end
+# ╔═╡ ff5ec074-be51-49f6-bfdc-7ddc9350cb77
+compute_coefficients!(K_ps, N)
 
 # ╔═╡ 17743a06-2078-47f5-8fdd-e72f2c1819f1
 md"""
-# Study of the series' convergence
+# Analyzing the results
 """
 
-# ╔═╡ cd753313-5142-4024-9a12-0ef5bfb07a9c
-md"""
-##### Create function
-"""
+# ╔═╡ fe260378-2e72-49e7-a665-7dbcc38b80a1
+orders = [2, 4, 6, 8, 25]; nothing
 
-# ╔═╡ 4d8d1fc9-748d-4841-80fe-de23b7976c35
-orders = [2,4,6,8,25]
+# ╔═╡ 2d6ca963-1dcf-4ae4-bdcd-c63b459ec05c
+y_range = 0:0.1:1; nothing
 
-# ╔═╡ dd8dc718-9aa4-4cc4-ad4a-9b979ad4eae2
-funcs = [build_matrix_elt(rs, o)[1] for o in orders]; nothing
-
-# ╔═╡ 13f578f8-0097-48c0-8c10-62fc1e20b6ed
-x_values = [0; 0.5;; 0.75; 1]
-
-# ╔═╡ 41ad664a-2a31-400b-a4f2-5e71296b2beb
-bound_funcs = map(ω -> [μ -> func(ω,μ) for func in funcs], x_values); nothing
-
-# ╔═╡ 004bea75-8225-4a26-bf7a-f583e6b00b56
-md"""
-##### Plotting
-"""
-
-# ╔═╡ 0a633733-76cb-4363-b04a-6c0a9f660873
-md"""
-###### 2D
-"""
-
-# ╔═╡ 64d13d07-7a9f-4ab9-84ce-e9747222617e
+# ╔═╡ 9697adb6-9827-406e-9886-b986ebc58a8e
 begin
-	f = Figure()
-	axs = Matrix{Axis}(undef, 2, 2)
-	for (i, x_value) in zip(eachindex(axs), x_values)
-		axs[i] = Axis(f[(i-1)÷2+1, (i-1)%2+1]; xlabel="y", title="K($x_value,y) for different values of the order N")
+	Ks = []
+	for order in orders
+		K, = build_matrix_elt(K_ps, order)
+		boundary_K(y) = K(1,y)
+		push!(Ks, boundary_K)
 	end
 end
 
-# ╔═╡ 2847c01b-026b-40fa-92ae-c2f14ec52fd4
-range = 0:0.05:1
+# ╔═╡ a01cd654-0590-4566-94db-a71040163e22
+fig = Figure(); nothing
 
-# ╔═╡ d7062d44-f9b3-40e9-a28a-dc905f97eea4
-for i in eachindex(axs)
-	for (o,func) in zip(orders, bound_funcs[i])
-		lines!(axs[i], range, func.(range); label="N=$o")
-	end
+# ╔═╡ 63943345-a7fc-4c06-85ea-d36ce92ba839
+ax = Axis(fig[1,1]; xlabel="y", title="K(1,y) for different values of N"); nothing
+
+# ╔═╡ d26fc1c9-bf68-44ad-8fd3-3b440d97e949
+for (order, f) in zip(orders, Ks)
+	lines!(ax, y_range, f.(y_range); label="N = $order")
 end
 
-# ╔═╡ d8e588a0-547c-4f24-8b09-713d15175314
-for ax in axs
-	axislegend(ax; position=:rt)
-end
+# ╔═╡ 86c8e907-be8c-4824-b444-4a0080eba9a4
+axislegend(ax; position=:rt); nothing
 
-# ╔═╡ 14db96a9-f5d6-41fe-b747-9c730971a6a5
-f
-
-# ╔═╡ 0074b6c6-c236-4d48-bff4-477cf0b8a350
-md"""
-###### 3D
-"""
-
-# ╔═╡ 3faabdbc-5f89-4d4f-9e8c-facd5398793d
-surface(range, range, [funcs[1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=2", xlabel="x", ylabel="y", zlabel="K(x,y)"))
-
-# ╔═╡ bfa7aef2-24fb-429d-b648-2234f8547656
-surface(range, range, [funcs[end-1](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=8", xlabel="x", ylabel="y", zlabel="K(x,y)"))
-
-# ╔═╡ df3b9147-ee7a-4638-a9d8-8b18fcb565b9
-surface(range, range, [funcs[end](x,y) for x in range, y in range], axis=(type=Axis3,title="K(x,y) for N=25", xlabel="x", ylabel="y", zlabel="K(x,y)"))
+# ╔═╡ 0dc1e94b-61fd-4739-9dee-38f7e24946c1
+display(fig)
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
-# ╠═c4c15963-07ad-4543-8b52-928616dd2f6a
-# ╠═6a9b9b8e-515d-432b-95c2-bbff42229160
-# ╠═be8ecdad-3bf0-49b9-a046-3539850e74a0
-# ╠═d5e314ff-ec78-4308-8ddf-56c5475c68d2
-# ╠═3af727a8-eab5-41ab-bd79-27903e3c3f53
+# ╠═96582742-0d69-47a1-bce6-5672385e4bb7
+# ╠═ed023b55-5dd6-437c-8ff9-a83c471e1361
+# ╠═243d9572-93af-4a74-bbe2-b260214cff31
+# ╠═c481d149-fcb1-4e31-96ed-64abfd3704ea
+# ╠═61f3d5e2-45a2-40f1-bf23-b4dfacf7f0e3
+# ╠═527a13c9-61df-4f50-9179-e551218fc04d
 # ╟─06d7d816-5bb2-4457-97cc-7d6b72524111
-# ╟─2518dedd-3ddc-4cf0-a2bd-02cbb9eb05a6
 # ╠═b69c5445-4d87-4986-bfcf-1309079bc36d
-# ╠═2b4329bb-6088-4b2b-ba38-2e25e05845dc
+# ╠═f3fa85ca-9d58-401f-83ec-4e2f68584436
 # ╟─3c8656ed-1fba-4d7d-bc05-bec290b2529a
-# ╠═c00635e2-6915-4dbf-8675-ba16645f8182
+# ╟─c00635e2-6915-4dbf-8675-ba16645f8182
+# ╠═08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
+# ╠═7636cea2-c846-4c71-bba7-7168ef006283
 # ╠═d1504ce0-6b32-488b-9392-ba824b979c8e
 # ╟─e683d8aa-5c46-4eaf-8ae8-045fdd6cc7a2
-# ╠═116e569f-fa07-4f59-b78d-a6aa761c3f36
-# ╠═df0df352-1c0c-49ce-9c3f-eccc53637faf
-# ╟─0b60f870-f16f-426a-a7e4-38c06d44440c
-# ╠═278cc95e-bb7c-47f6-ac93-47de6964df2e
-# ╟─d48fce35-639a-4785-9c52-63e961330c05
-# ╠═297c70be-ce17-4cac-8dfd-27dc4c06a03e
-# ╠═4fac33d3-c70a-4d4f-bb9c-1d2b35b476f5
-# ╠═11fb4468-c439-40d0-99ff-1445a0b10094
-# ╟─bd3f2ffb-a7c4-409c-ab0d-eaaee537ce24
-# ╠═db4c3485-9a1d-4281-ae55-d681b9599c1f
-# ╠═4a420f7a-3008-42a1-a30e-b9ce0f858fad
-# ╟─679c481c-0697-4d35-992b-531a68a6d694
-# ╠═1db49b0a-ecae-4d99-bd2d-4abec3fe79a6
+# ╠═467f87c5-4f6d-4466-a53a-fe231f16e0d1
+# ╠═61a0b5b2-2a67-4322-af15-46d961b21cf8
+# ╟─00de77c1-e8f0-428b-a327-6f5af696aab9
+# ╠═cae5baf9-4623-4feb-ac37-0455552f45c1
+# ╠═b38b0c10-ffa6-4a39-8828-805bd701c393
+# ╟─18f8860c-b213-4545-a1c6-b15a67998834
+# ╠═09f4e5a7-aad0-41e0-be20-7658a390835e
+# ╟─7a1b11be-ff45-4c2f-aa61-a7dfdb80b425
+# ╠═db8468ed-d28f-4a84-a84a-41c791a689a9
+# ╠═6ffa8c0a-7b54-4466-80dd-80a553729152
+# ╠═ff5ec074-be51-49f6-bfdc-7ddc9350cb77
 # ╟─17743a06-2078-47f5-8fdd-e72f2c1819f1
-# ╟─cd753313-5142-4024-9a12-0ef5bfb07a9c
-# ╠═4d8d1fc9-748d-4841-80fe-de23b7976c35
-# ╠═dd8dc718-9aa4-4cc4-ad4a-9b979ad4eae2
-# ╠═13f578f8-0097-48c0-8c10-62fc1e20b6ed
-# ╠═41ad664a-2a31-400b-a4f2-5e71296b2beb
-# ╟─004bea75-8225-4a26-bf7a-f583e6b00b56
-# ╟─0a633733-76cb-4363-b04a-6c0a9f660873
-# ╠═64d13d07-7a9f-4ab9-84ce-e9747222617e
-# ╠═2847c01b-026b-40fa-92ae-c2f14ec52fd4
-# ╠═d7062d44-f9b3-40e9-a28a-dc905f97eea4
-# ╠═d8e588a0-547c-4f24-8b09-713d15175314
-# ╠═14db96a9-f5d6-41fe-b747-9c730971a6a5
-# ╟─0074b6c6-c236-4d48-bff4-477cf0b8a350
-# ╠═3faabdbc-5f89-4d4f-9e8c-facd5398793d
-# ╠═bfa7aef2-24fb-429d-b648-2234f8547656
-# ╠═df3b9147-ee7a-4638-a9d8-8b18fcb565b9
+# ╠═fe260378-2e72-49e7-a665-7dbcc38b80a1
+# ╠═2d6ca963-1dcf-4ae4-bdcd-c63b459ec05c
+# ╠═9697adb6-9827-406e-9886-b986ebc58a8e
+# ╠═a01cd654-0590-4566-94db-a71040163e22
+# ╠═63943345-a7fc-4c06-85ea-d36ce92ba839
+# ╠═d26fc1c9-bf68-44ad-8fd3-3b440d97e949
+# ╠═86c8e907-be8c-4824-b444-4a0080eba9a4
+# ╠═0dc1e94b-61fd-4739-9dee-38f7e24946c1

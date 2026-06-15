@@ -68,7 +68,7 @@ Where $c$ is a tunning parameter
 
 Using the Volterra transformation $w(t,x) = u(t,x) - \int_{0}^{x}K(x,y)u(t,y) dy$, one can get the target system if there exists a kernel $K(x,y)$ which satisfies the following equations : 
 $$\begin{cases}
-  K_{xx}(x,y) - K_{yy}(x,y) = \frac{\lambda(y)+c}{\eps} \\
+  K_{xx}(x,y) - K_{yy}(x,y) = \frac{\lambda(y)+c}{\eps}K(x,y) \\
   K(x,0) = 0 \\
   K(x,x) = \frac{-1}{2\eps}\int_{0}^{x} \bigl(\lambda(y) + c\bigr) dy 
 \end{cases}$$

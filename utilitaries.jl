@@ -233,4 +233,11 @@ function generate_trunc_indices(N::Int, D::Int)::Vector
     end
 end
 
+"""
+    generate_fullsym_indices(N::Int, D::Int)
+
+    Generates the fully symetric indices of order N and dimension D
+    For instance, 
+    generate_fullsym_indices(2, 3) = [[2,0,0], [1,1,0], [1,0,1], [0,2,0], [0,1,1], [0,0,2]]
+"""
 generate_fullsym_indices(N::Int, D::Int)::Vector = map(idx -> convertIndices_trunc_to_fullsym(idx...), generate_trunc_indices(N,D))

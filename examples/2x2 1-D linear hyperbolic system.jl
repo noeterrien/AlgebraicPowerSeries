@@ -96,7 +96,7 @@ md"""
 """
 
 # ╔═╡ baef7a66-c86b-459e-a187-fecf1a43c059
-PDEs = Σ(x)*∂x(K(x,y)) + ∂y(K(x,y))*Σ(y) .~ K(x,y)*(C(y)-∂y(Σ(y))) - C₀(x)*K(x,y)
+PDEs = Σ(x)*∂x(K(x,y)) + ∂y(K(x,y))*Σ(y) .~ K(x,y)*(C(y)-∂y(Σ(y))) - C₀(x)*K(x,y); nothing
 
 # ╔═╡ 2e81893c-0de6-403f-8b15-72b6c46fadf6
 md"""
@@ -104,10 +104,10 @@ md"""
 """
 
 # ╔═╡ b1569d5a-ba7e-4358-9f4f-f75417fdbeb8
-BC1 = K(x,x)*Σ(x) - Σ(x)*K(x,x) .~ C(x) - C₀(x)
+BC1 = K(x,x)*Σ(x) - Σ(x)*K(x,x) .~ C(x) - C₀(x); nothing
 
 # ╔═╡ ac06dd23-4105-4a28-8517-badfc47b64f8
-BC2 = K(x,0)*Σ(0)*[q, 1] .~ 0
+BC2 = K(x,0)*Σ(0)*[q, 1] .~ 0; nothing
 
 # ╔═╡ 980fd8df-4003-400e-a96c-6199f855158e
 md"""
@@ -121,7 +121,7 @@ getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []; nothing
 K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknowns, [BC1...; BC2...; PDEs...;], [N -> [], N -> [N], N -> [N], N -> [], N -> [N], N -> [N], getindices, getindices, getindices, getindices])
 
 # ╔═╡ 505d68b5-1b8c-4e87-bc17-24deff01e5dc
-compute_coefficients!(K_ps, N; verbose=2)
+compute_coefficients!(K_ps, N)
 
 # ╔═╡ a44f22da-e181-4cd3-a04e-de3b050767ab
 md"""

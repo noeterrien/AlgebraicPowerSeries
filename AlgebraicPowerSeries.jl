@@ -631,8 +631,10 @@ end
       NlinearSeriesOperation and MultilinearSeriesOperation are the branches,
       and ScalarSeriesSymbol are the leaves (leaves may also be other objects such as 
       Numbers)
-    - `center::Vector` -- A vector of length D which represents the center around which
-      the series should be computed when needed
+    - `center::Vector` -- A vector of length D which represents the center 
+      around which the series should be computed when needed. Its component can be set two 
+      :unspecified in which case if operations happen between this SymbolicSeries and
+      another one, the other series specified center component will be used in priority
     - `get_selfseries_coefficients` -- A function which, given a Vararg{Int, D} returns the
       SeriesCoefficients that refer to series :self that appear when computing the
       coefficient of that series at this index. The return value should be a 
@@ -690,7 +692,7 @@ function SymbolicSeries(ps::PowerSeries)
 end
 
 # used for addition of constants
-SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D)), zeros(D), I::Vararg{Int, D} -> Set())
+SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D)), fill(:unspecified, D), I::Vararg{Int, D} -> Set())
 Base.convert(::Type{SymbolicSeries{D}}, x::Number) where D = SymbolicSeries{D}(x)
 
 function Base.show(io::IO, s::SymbolicSeries)
@@ -794,20 +796,39 @@ Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries(NlinearSeriesOpera
 Base.zero(::SymbolicSeries{D}) where D = Base.zero(SymbolicSeries{D})
 
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
-    s1.center != s2.center && throw(ArgumentError("Can only add SymbolicSeries that have the \
-                                                   same centers"))
+    
+    center = []
+    for (c1, c2) in zip(s1.center, s2.center)
+        if c1 != :unspecified && c2 != :unspecified && c1!=c2
+            throw(ArgumentError("Can only add SymbolicSeries that have the same centers"))
+        elseif c1 == :unspecified
+            push!(center, c2)
+        else
+            push!(center, c1)
+        end
+    end
+
     op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
-    SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
+    SymbolicSeries(op, center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
 Base.:+(s::SymbolicSeries{D}, x::Number) where D = s + SymbolicSeries{D}(x)
 Base.:+(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) + s
 
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
-    s1.center != s2.center && throw(ArgumentError("Can only substract SymbolicSeries that have the \
-                                                   same centers"))
+    center = []
+    for (c1, c2) in zip(s1.center, s2.center)
+        if c1 != :unspecified && c2 != :unspecified && c1!=c2
+            throw(ArgumentError("Can only substract SymbolicSeries that have the same centers"))
+        elseif c1 == :unspecified
+            push!(center, c2)
+        else
+            push!(center, c1)
+        end
+    end
+
     op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2])
-    SymbolicSeries(op, s1.center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
+    SymbolicSeries(op, center, I::Vararg{Int, D} -> s1.get_selfseries_coefficients(I...) ∪ s2.get_selfseries_coefficients(I...))
 end
 
 Base.:-(s::SymbolicSeries{D}, x::Number) where D = s - SymbolicSeries{D}(x)
@@ -853,11 +874,21 @@ function Base.:/(s::SymbolicSeries, t::Number)
 end
 
 function Base.:*(s1::SymbolicSeries{1}, s2::SymbolicSeries{1})
-    s1.center != s2.center && throw(ArgumentError("Can only multiply SymbolicSeries that have the same centers"))
+    center = []
+    for (c1, c2) in zip(s1.center, s2.center)
+        if c1 != :unspecified && c2 != unspecified && c1!=c2
+            throw(ArgumentError("Can only multiply SymbolicSeries that have the same centers"))
+        elseif c1 == :unspecified
+            push!(center, c2)
+        else
+            push!(center, c1)
+        end
+    end
+    
     arg(j; params::Vector=[]) = NlinearSeriesOperation(v -> v[1]*v[2], [s1[j], s2[params[1]-j]])
     op = MultilinearSeriesOperation(x -> Base.:+(x...), arg, [:idx1], [(0,:idx1)])
     get_selfseries_coefficients(i::Int) = union([s1.get_selfseries_coefficients(j) ∪ s2.get_selfseries_coefficients(i-j) for j in 0:i]...)
-    SymbolicSeries(op, s1.center, get_selfseries_coefficients)
+    SymbolicSeries(op, center, get_selfseries_coefficients)
 end
 
 ##################################### EvaluatedSymbolicSeries #####################################
@@ -932,21 +963,31 @@ function (s::SymbolicSeries{D})(at::Vararg{Num, D})::EvaluatedSymbolicSeries whe
         end
     end
 
-    # construct center and ensure identical variables have identical center components
+    # construct center and variables and ensure identical variables have identical center components
     center = []
+    center_idx = 1
+    variable_to_center_idx = Dict()
+    new_var = Num[]
     for (i,v) in enumerate(variables)
-        if i == index_mapper[i]
+        if v ∉ keys(variable_to_center_idx)
             push!(center, s.center[i])
+            push!(new_var, v)
+            variable_to_center_idx[v] = center_idx
+            center_idx += 1
         else
-            s.center[i] == s.center[index_mapper[i]] || throw(ArgumentError("Series $s does not have the same \
-                                                                             center components at index $i and \
-                                                                             $(index_mapper[i])"))
+            if s.center[i] != :unspecified && center[variable_to_center_idx[v]] != :unspecified
+                s.center[i] == center[variable_to_center_idx[v]] || throw(ArgumentError("Series $s does not have the same \
+                                                                                         center components at index $i and \
+                                                                                         previous indices where it was \
+                                                                                         evaluated in the same variable"))
+            elseif center[variable_to_center_idx[v]] == :unspecified
+                center[variable_to_center_idx[v]] = s.center[i]
+            end
         end
     end
 
 
     # compute new variables
-    new_var = unique(variables)
     new_var_idx = Dict(v => i for (i,v) in enumerate(new_var))
 
     # construct params list
@@ -1053,7 +1094,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Union{Num, Symbol, AbstractFloat, Int
     new_vars = []
     for (i,v) in enumerate(at)
         if v isa Union{AbstractFloat, Integer}
-            v == s.center[i] || throw(ArgumentError("Trying to evaluate $s at a point that is not its origin"))
+            v == s.center[i] || s.center[i] == :unspecified || throw(ArgumentError("Trying to evaluate $s at a point that is not its origin"))
         push!(new_vars, :c)
         else
             push!(new_vars, v)
@@ -1178,7 +1219,9 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
 
     # check if centers are the same
     for v in keys(variables_idx_s1) ∩ keys(variables_idx_s2)
-        if s1.series.center[variables_idx_s1[v]] != s2.series.center[variables_idx_s2[v]]
+        if (s1.series.center[variables_idx_s1[v]] != s2.series.center[variables_idx_s2[v]] &&
+            s1.series.center[variables_idx_s1[v]] != :unspecified &&
+            s2.series.center[variables_idx_s2[v]] != :unspecified)
             throw(ArgumentError("Center component $(s1.series.center[variables_idx_s1[v]]) \
                                  for variable $v in series $(s1.series) does not match \
                                  $(s2.series.center[variables_idx_s2[v]]) for variable \
@@ -1194,10 +1237,17 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
     res_variables_idx = Dict([v => i for (i,v) in enumerate(res_variables)])
 
     # construct center
-    new_center = map(v -> v in keys(variables_idx_s1) ? 
-                          s1.series.center[variables_idx_s1[v]] : 
-                          s2.series.center[variables_idx_s2[v]],
-                          res_variables)
+    new_center = map( v -> v in keys(variables_idx_s1) ? 
+                      ( s1.series.center[variables_idx_s1[v]] != :unspecified ?
+                        s1.series.center[variables_idx_s1[v]] : 
+                        ( v in keys(variables_idx_s2) ? 
+                          s2.series.center[variables_idx_s2[v]] :
+                          :unspecified
+                        )
+                      ) : 
+                      s2.series.center[variables_idx_s2[v]],
+                      res_variables
+                    )
 
     # construct ranges
     common_variables = filter(v -> v in (keys(variables_idx_s1) ∩ keys(variables_idx_s2)),
@@ -1263,41 +1313,50 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
 
     # find variable index
     x_idx = findfirst(v -> isequal(v, d.x), s.variables)
-
+    
     # create index
     index = generate_index_list(D)
 
+    # handle differentiation at order greater than 1
+    new_s = d.order == 1 ? s : Differential(d.x, d.order-1)(s)
+    
+
     op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1]*v[2], 
                                                             [(u[x_idx]+1), 
-                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):end]...]])
+                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):end]...]])
                                 , index)
+    
+    get_selfseries_coefficients(I::Vararg{Int, D}) = new_s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...)
+    EvaluatedSymbolicSeries(SymbolicSeries(op, new_s.series.center, get_selfseries_coefficients), new_s.variables)
 
-    get_selfseries_coefficients(I::Vararg{Int, D}) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...)
-    EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center, get_selfseries_coefficients), s.variables)
 
 end
 (d::Differential)(a::Array{<:EvaluatedSymbolicSeries}) = d.(a)
 
 """
-    ∫(s::EvaluatedSymbolicSeries, x)
+    ∫(s::EvaluatedSymbolicSeries{D}, x) where D
 
     Integrate s with respect to x (new constant coefficient is zero), meaning the
     integration is done from s center to x.
 
     Throws an error if x is not one of s variables
 """
-function ∫(s::EvaluatedSymbolicSeries, x)
+function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
     any([isequal(v, x) for v in s.variables]) || throw(ArgumentError("$x is not a variable of $s. Available variables are : $(s.variables)"))
 
     # find variable index
-    x_idx = findfirst(v -> isequal(v, d.x), s.variables)
+    x_idx = findfirst(v -> isequal(v, x), s.variables)
 
     # create index
     index = generate_index_list(D)
 
+
+
     op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1] == 0 ? 0 : v[2]/v[1], 
-                                                            [u[x_idx], 
-                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end]...]])
+                                                            [u[x_idx],
+                                                             u[x_idx] == 0 ? 0 :  
+                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end]...]
+                                                            ])
                                 , index)
 
     get_selfseries_coefficients(I::Vararg{Int, D}) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...)
@@ -1340,29 +1399,53 @@ struct SymbolicSeriesEquation{D}
     RHS::SymbolicSeries{D}
 end
 
-function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D}, Number}, 
-                                RHS::Union{EvaluatedSymbolicSeries{D}, Number}) where D
+function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D1}, Number}, 
+                                RHS::Union{EvaluatedSymbolicSeries{D2}, Number}) where {D1, D2}
     if LHS isa EvaluatedSymbolicSeries && RHS isa EvaluatedSymbolicSeries
-        isequal(Set(LHS.variables), Set(RHS.variables)) || throw(ArgumentError("Trying to construct a \
-                                                           SymbolicSeriesEquation with two \
-                                                           EvaluatedSymbolicSeries which \
-                                                           variables do not match"))
-        # if necessary, swap indices of RHS
-        var_idx = Dict([v => i for (i,v) in enumerate(LHS.variables)])
-        index = generate_index_list(length(LHS.variables))
-        swap = NlinearSeriesOperation(index -> RHS.series[[index[var_idx[v]] for v in RHS.variables]...], index)
-        get_selfseries_coefficients(index::Vararg{Int,D}) = RHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in RHS.variables]...)
-        new_RHSseries = SymbolicSeries(swap, RHS.series.center, get_selfseries_coefficients)
+        variables_set = Set(LHS.variables) ∪ Set(RHS.variables)
+        variables = [variables_set...]
+        D = length(variables)
+
+        # create resulting variables
+        var_idx = Dict([v => i for (i,v) in enumerate(variables)])
+        index = generate_index_list(D)
+
+        # create resulting center
+        LHS_var_idx = Dict([v => i for (i,v) in enumerate(LHS.variables)])
+        RHS_var_idx = Dict([v => i for (i,v) in enumerate(RHS.variables)])
+        center = []
+        for v in variables
+            if v ∉ keys(RHS_var_idx) || RHS_var_idx[v] == :unspecified
+                push!(center, LHS.series.center[LHS_var_idx[v]])
+            elseif v ∉ keys(LHS_var_idx) || LHS_var_idx[v] == :unspecified
+                push!(center, RHS.series.center[RHS_var_idx[v]])
+            elseif LHS.series.center[LHS_var_idx[v]] != RHS.series.center[RHS_var_idx[v]]
+                throw(ArgumentError("Cannot create an equation between two series which
+                                     centers do not match"))
+            else
+                push!(center, LHS.series.center[LHS_var_idx[v]])
+            end
+        end
+
+        # swap indices to match array of resulting indices
+        swap1 = NlinearSeriesOperation(index -> LHS.series[[index[var_idx[v]] for v in LHS.variables]...], index)
+        get_selfseries_coefficients1(index::Vararg{Int}) = LHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in LHS.variables]...)
+        new_LHSseries = SymbolicSeries(swap1, center, get_selfseries_coefficients1)
+
+        swap2 = NlinearSeriesOperation(index -> RHS.series[[index[var_idx[v]] for v in RHS.variables]...], index)
+        get_selfseries_coefficients2(index::Vararg{Int}) = RHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in RHS.variables]...)
+        new_RHSseries = SymbolicSeries(swap2, center, get_selfseries_coefficients2)
         
-        SymbolicSeriesEquation(LHS.series, new_RHSseries)
+        
+
+        SymbolicSeriesEquation(new_LHSseries, new_RHSseries)
     else
-        SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : SymbolicSeries{D}(LHS), 
-                               RHS isa EvaluatedSymbolicSeries ? RHS.series : SymbolicSeries{D}(RHS))
+        SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : SymbolicSeries{D2}(LHS), 
+                               RHS isa EvaluatedSymbolicSeries ? RHS.series : SymbolicSeries{D1}(RHS))
     end
 end
 
-Base.:~(LHS::Union{SymbolicSeries{D}, Number}, RHS::Union{SymbolicSeries{D}, Number}) where D = SymbolicSeriesEquation(LHS, RHS)
-Base.:~(LHS::Union{EvaluatedSymbolicSeries{D}, Number}, RHS::Union{EvaluatedSymbolicSeries{D}, Number}) where D = SymbolicSeriesEquation(LHS, RHS)
+Base.:~(LHS::Union{EvaluatedSymbolicSeries, Number}, RHS::Union{EvaluatedSymbolicSeries, Number}) = SymbolicSeriesEquation(LHS, RHS)
 Base.:~(LHS::Number, RHS::Number) = Equation(LHS, RHS)
 
 Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "SymbolicSeriesEquation{\n $(eq.LHS) \n ~ \n $(eq.RHS) \n}")
