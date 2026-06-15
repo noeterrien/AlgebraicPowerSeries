@@ -59,7 +59,7 @@ md"""
 """
 
 # ╔═╡ fa0e5bce-5ba3-4833-aed5-545e31d166de
-@bind N PlutoUI.Slider(0:100; default=30, show_value=N -> "Order : N=$N")
+@bind N PlutoUI.Slider(0:100; default=3, show_value=N -> "Order : N=$N")
 
 # ╔═╡ c26326ea-ad12-4f6c-9dac-40bb68133c7f
 q = 1; nothing
@@ -123,52 +123,52 @@ K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknowns, [BC1...; BC2...; PDEs...;]
 # ╔═╡ 505d68b5-1b8c-4e87-bc17-24deff01e5dc
 compute_coefficients!(K_ps, N; verbose=2)
 
-# ╔═╡ a44f22da-e181-4cd3-a04e-de3b050767ab
-md"""
-# Analyzing the results
-"""
+# # ╔═╡ a44f22da-e181-4cd3-a04e-de3b050767ab
+# md"""
+# # Analyzing the results
+# """
 
-# ╔═╡ 993eaaab-6e9a-4af2-a5ed-3f19a77fb42d
-orders = [15, 20, 25, 30]; nothing
+# # ╔═╡ 993eaaab-6e9a-4af2-a5ed-3f19a77fb42d
+# orders = [15, 20, 25, 30]; nothing
 
-# ╔═╡ a2269f12-b655-4a7f-9b8f-5ca20cbecb11
-y_range = 0:0.01:1; nothing
+# # ╔═╡ a2269f12-b655-4a7f-9b8f-5ca20cbecb11
+# y_range = 0:0.01:1; nothing
 
-# ╔═╡ a7d8d4f1-8b87-4ec8-8e81-4372f91e4162
-begin 
-	Ks = []
-	for order in orders
-		K_at_order = build_matrix_elt(K_ps, order)
-		boundary_K = Matrix{Any}(undef, 2,2)
-		for i in 1:2, j in 1:2
-			Kˣˣ(y) = K_at_order[i,j](1,y)
-			boundary_K[i,j] = Kˣˣ
-		end
-		push!(Ks, boundary_K)
-	end
-end
+# # ╔═╡ a7d8d4f1-8b87-4ec8-8e81-4372f91e4162
+# begin 
+# 	Ks = []
+# 	for order in orders
+# 		K_at_order = build_matrix_elt(K_ps, order)
+# 		boundary_K = Matrix{Any}(undef, 2,2)
+# 		for i in 1:2, j in 1:2
+# 			Kˣˣ(y) = K_at_order[i,j](1,y)
+# 			boundary_K[i,j] = Kˣˣ
+# 		end
+# 		push!(Ks, boundary_K)
+# 	end
+# end
 
-# ╔═╡ a8eb1972-97b6-486e-8f14-a49bcfecfed4
-fig = Figure(); nothing
+# # ╔═╡ a8eb1972-97b6-486e-8f14-a49bcfecfed4
+# fig = Figure(); nothing
 
-# ╔═╡ 81198cfe-3f86-438a-9bc3-95c4bf9b431d
-labels = ["Kᵘᵘ(1,y)"; "Kᵛᵘ(1,y)";; "Kᵘᵛ(1,y)"; "Kᵛᵛ(1,y)"]; nothing
+# # ╔═╡ 81198cfe-3f86-438a-9bc3-95c4bf9b431d
+# labels = ["Kᵘᵘ(1,y)"; "Kᵛᵘ(1,y)";; "Kᵘᵛ(1,y)"; "Kᵛᵛ(1,y)"]; nothing
 
-# ╔═╡ 23c47864-c772-45a7-a7ec-d7b3355bead9
-axs = map(t -> Axis(fig[t[1],t[2]]; title="$(labels[t[1],t[2]]) for different values of N"), CartesianIndices((1:2, 1:2))); nothing
+# # ╔═╡ 23c47864-c772-45a7-a7ec-d7b3355bead9
+# axs = map(t -> Axis(fig[t[1],t[2]]; title="$(labels[t[1],t[2]]) for different values of N"), CartesianIndices((1:2, 1:2))); nothing
 
-# ╔═╡ 692944ca-e7a4-4355-b054-572fef0b7bf7
-for (order, K_array) in zip(orders, Ks)
-	for i in 1:2, j in 1:2
-		lines!(axs[i,j], y_range, K_array[i,j].(y_range); label="N=$order")
-	end
-end
+# # ╔═╡ 692944ca-e7a4-4355-b054-572fef0b7bf7
+# for (order, K_array) in zip(orders, Ks)
+# 	for i in 1:2, j in 1:2
+# 		lines!(axs[i,j], y_range, K_array[i,j].(y_range); label="N=$order")
+# 	end
+# end
 
-# ╔═╡ 16a1886d-ced9-4d7a-a7cc-88bcdfdd3770
-foreach(ax -> axislegend(ax; position=:rt), axs)
+# # ╔═╡ 16a1886d-ced9-4d7a-a7cc-88bcdfdd3770
+# foreach(ax -> axislegend(ax; position=:rt), axs)
 
-# ╔═╡ f37a2344-b532-4fa9-8002-90da20a98451
-display(fig)
+# # ╔═╡ f37a2344-b532-4fa9-8002-90da20a98451
+# display(fig)
 
 # ╔═╡ Cell order:
 # ╟─b34ceca0-58f9-11f1-9c39-fd7d92bf34d9
