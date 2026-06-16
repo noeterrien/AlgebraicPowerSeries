@@ -695,7 +695,7 @@ function SymbolicSeries(ps::PowerSeries)
 end
 
 # used for addition of constants
-SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D)), fill(:unspecified, D), I::Vararg{Int, D} -> Set())
+SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D)), fill(:unspecified, D), (I::Vararg{Int, D}; N=nothing) -> Set())
 Base.convert(::Type{SymbolicSeries{D}}, x::Number) where D = SymbolicSeries{D}(x)
 
 function Base.show(io::IO, s::SymbolicSeries)
@@ -795,7 +795,7 @@ getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s
 """
 getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getNum(s[idx...])
 
-Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries(NlinearSeriesOperation(x -> 0, []), zeros(D), I::Vararg{Int, D} -> Set())
+Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries(NlinearSeriesOperation(x -> 0, []), zeros(D), (I::Vararg{Int, D}; N=nothing) -> Set())
 Base.zero(::SymbolicSeries{D}) where D = Base.zero(SymbolicSeries{D})
 
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
