@@ -453,7 +453,7 @@ end
     be described as NlinearSeriesOperation. These operations correspond to the application
     of a func over a Vector args of arguments that can be SymbolicSeries, Numbers, ...
 
-    ###Fiels
+    ###Fields
 
     - `func` -- The function used to aggregate all the arguments. Should take a vector as 
       input.
