@@ -674,12 +674,13 @@ end
 
 function SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)
     if sss.ps != :self
-        SymbolicSeries(sss, center, I::Vararg{Int} -> Set())
+        get_selfseries_coefficients1(I::Vararg{Int}; N=nothing) = Set()
+        SymbolicSeries(sss, center, get_selfseries_coefficients1)
     else
-        get_selfseries_coefficients(I::Vararg{Int}; N=nothing) = sss[convertIndices_fullsym_to_trunc(I...)...].ps == :self ? 
-                                                                 Set([sss[convertIndices_fullsym_to_trunc(I...)...]]) : 
-                                                                 Set()
-        SymbolicSeries(sss, center, get_selfseries_coefficients)
+        get_selfseries_coefficients2(I::Vararg{Int}; N=nothing) = sss[convertIndices_fullsym_to_trunc(I...)...].ps == :self ? 
+                                                                  Set([sss[convertIndices_fullsym_to_trunc(I...)...]]) : 
+                                                                  Set()
+        SymbolicSeries(sss, center, get_selfseries_coefficients2)
     end
 end
 
@@ -1063,10 +1064,10 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
 
                 index = generate_index_list(l-1)
                 op = NlinearSeriesOperation(v -> s[v...], 
-                                            [index[1:x_idx-1]...,0,index[x_idx:end]])
+                                            [index[1:x_idx-1]...,0,index[x_idx:end]...])
                 
                 get_selfseries_coefficients3(idcs::Vararg{Int}; N=nothing) = 
-                    s.get_selfseries_coefficients(idcs[1:x_idx-1]...,0,idcs[x_idx:end]; N)
+                    s.get_selfseries_coefficients(idcs[1:x_idx-1]...,0,idcs[x_idx:end]...; N)
 
                 center = copy(s.center)
                 deleteat!(center, x_idx)
