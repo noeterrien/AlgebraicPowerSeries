@@ -57,6 +57,15 @@ K = SymbolicSeries(selfseries_symbols(2), [0,0])
 @show getSymbolics((c(x)*K[1](x,y))[1,0])
 @show getSymbolics((c(x)*K[1](x,y))[0,1])
 
+@test getNum(test1_ss(x,2,3)[0,N=2]) ≈ 25
+@test getNum(test1_ss(x,2,3)[1,N=2]) ≈ 5
+@test getNum(test1_ss(x,2,3)[2,N=2]) ≈ 1
+
+@test getNum(test1_ss(1,y,y)[0,N=2]) ≈ 2
+@test getNum(test1_ss(1,y,y)[1,N=2]) ≈ 3
+@test getNum(test1_ss(1,y,y)[2,N=2]) ≈ 4
+
+
 #-----------------------------------------------------Real use-case testing-----------------------------------------------
 @variables x ξ
 ∂x, ∂ξ = Differential(x), Differential(ξ)
