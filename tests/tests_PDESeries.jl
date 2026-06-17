@@ -108,7 +108,7 @@ let
 
     # PDESeries
     getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []
-    K = PDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4], [N -> [N], N -> [N], getindices, getindices])
+    K = PDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4])
     compute_coefficients!(K, N; verbose=2)
 
     Kᵛᵘ = K_symbols[1]
@@ -143,11 +143,11 @@ let
     @test get_involved_selfseries_coefficients(R4, 0, 0) == Set([K_symbols[1][1,0], K_symbols[1][1,1], K_symbols[1][0,0], K_symbols[2][0,0]])
 
     #LocalizedPDESeries
-    K = LocalizedPDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4])
-    compute_coefficients!(K, N)
+    K = LocalizedPDESeries{Float64}(:K, [x,ξ], [0,0], [R1, R2, R3, R4], K_symbols)
+    compute_coefficients!(K, N; verbose=true)
 
-    Kᵛᵘ = K_symbols[1]
-    Kᵛᵛ = K_symbols[2]
+    Kᵛᵘ = K[1]
+    Kᵛᵛ = K[2]
     Kᵛᵘ_matematica = [-1.11111, -0.109739, 0.109739, 0.737015/2, 1.89131/2, 1.15768/2, -1.18738/6, -5.98654/6, -6.99183/6, 16.6349/6]
     Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
     tol = 1e-5

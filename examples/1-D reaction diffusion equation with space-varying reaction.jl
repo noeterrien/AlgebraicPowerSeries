@@ -109,11 +109,8 @@ md"""
 # Computing the coefficients up to order N
 """
 
-# ╔═╡ db8468ed-d28f-4a84-a84a-41c791a689a9
-getindices(N) = N ≥ 2 ? generate_fullsym_indices(N-2, 2) : []; nothing
-
 # ╔═╡ 6ffa8c0a-7b54-4466-80dd-80a553729152
-K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknown, [BC1, BC2, PDE], [N -> [N], N -> N ≥ 1 ? [N] : [], getindices])	
+K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknown, [BC1, BC2, PDE])	
 
 # ╔═╡ ff5ec074-be51-49f6-bfdc-7ddc9350cb77
 compute_coefficients!(K_ps, N)
@@ -181,7 +178,6 @@ display(fig)
 # ╟─18f8860c-b213-4545-a1c6-b15a67998834
 # ╠═09f4e5a7-aad0-41e0-be20-7658a390835e
 # ╟─7a1b11be-ff45-4c2f-aa61-a7dfdb80b425
-# ╠═db8468ed-d28f-4a84-a84a-41c791a689a9
 # ╠═6ffa8c0a-7b54-4466-80dd-80a553729152
 # ╠═ff5ec074-be51-49f6-bfdc-7ddc9350cb77
 # ╟─17743a06-2078-47f5-8fdd-e72f2c1819f1

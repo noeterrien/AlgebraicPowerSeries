@@ -1503,31 +1503,31 @@ end
     - `center::Vector` -- The series center, i.e c in Σaᵢ(x-c)ⁱ
     - `coefficients::Array{Vector{T},D}` -- The series coefficients
     - `order::Int` -- The order to which coefficients were already computed (-1 means none)
-    - `scalar_series_ref::Array{ScalarSeriesSymbol, D}` -- An array of 
+    - `maxIntegrationOrders::Array{ScalarSeriesSymbol, D}` -- An array of 
       ScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
 
     - `equations::Vector{Union{Equation, SymbolicSeriesEquation}}` -- The PDE and its boundary 
       conditions
-    - `indices_inference::Vector` -- A Vector that indicates the indices / if each
-      equation should be called with to get the equations of a given order N.
-      The order of this Vector is the same as the order of the equations Vector.
-      For each eq ∈ equations, 
-        * if eq isa Equation, then provide a Tuple of 2 elements made of :
-          - N : the order for which this equation should be used
-          - a Vector of the unknown SeriesCoefficient that appear in it.
-          This Vector should only contain SeriesCoefficient of order N 
-        * if eq isa SymbolicSeriesEquation, provide a function whose input is an integer N
-          representing the order that is being computed and whose output is a Vector of 
-          Vector of indices, specified in fullsym format, i.e 
-          a₀₀ + a₁₀ x + a₀₁ y + a₂₀ x² + a₁₁ xy + a₀₂ y² +... 
-
+    - `maxIntegrationOrders::Vector{Int}` -- What is the maximum number of consecutive
+      integration operations of :self series that happen in each equation ? This will be 
+      used to compute the maximum order at which each equation should be expanded. For 
+      instance if one has an equation that does 2 integrations of the :self series, this
+      value will be 2, and so all equations of orders up to order+2 will be expanded and 
+      potentially used.
+    - `used_equations::Vector{Set{Vector{Int}}}` -- For each equations, a set of the
+      indices it has already been expanded to and solved for with previously computed
+      orders
 
     ### Examples
 
     - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
-                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
+                    unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
                     equations::Vector{Union{Equation, SymbolicSeriesEquation}},
-                    indices_inference::Vector) where T` -- default constructor
+                    maxIntegrationOrders::Vector{Int}) where T` -- default constructor
+    - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
+                    unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
+                    equations::Vector{Union{Equation, SymbolicSeriesEquation}}) where T` 
+      -- same as default constructor but maxIntegrationOrders default to 0
 """
 mutable struct PDESeries{T,D} <: PowerSeries{T,D}
     
@@ -1539,21 +1539,35 @@ mutable struct PDESeries{T,D} <: PowerSeries{T,D}
     order::Int
     scalar_series_ref::Array{ScalarSeriesSymbol, D}
 
-    equations::Vector{Union{Equation, SymbolicSeriesEquation}}
-    indices_inference::Vector
+    equations::Vector{SymbolicSeriesEquation}
+    maxIntegrationOrders::Vector{Int}
+    used_equations::Vector{Set{Vector{Int}}}
 
     function PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
-                          unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
-                          equations::Vector,
-                          indices_inference::Vector) where {T}
+                          unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
+                          equations::Vector{<:SymbolicSeriesEquation},
+                          maxIntegrationOrders::Vector{Int}) where {T}
 
         _size = unknown isa AbstractArray ? size(unknown) : (1,)
         coefficients = map(x -> T[], CartesianIndices(_size))
 
+        used_equations = []
+        for _ in equations 
+            push!(used_equations, Set{Vector{Int}}())
+        end
+
         new{T, unknown isa AbstractArray ? ndims(unknown) : 1}(seriesID, _size, variables, 
-        center, coefficients, -1, unknown isa AbstractArray ? unknown : [unknown], equations, indices_inference)
+        center, coefficients, -1, unknown isa AbstractArray ? unknown : [unknown], 
+        equations, maxIntegrationOrders, used_equations)
     end
 
+end
+
+function PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector,
+                      unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol},
+                      equations::Vector{SymbolicSeriesEquation}) where T
+    maxIntegrationOrders = zeros(Int, length(equations))
+    PDESeries{T}(seriesID, variables, center, unknown, equations, maxIntegrationOrders)
 end
 
 """
@@ -1576,6 +1590,25 @@ end
 expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> expected_unknowns(sss, D, N), K)
 
 """
+    PDES_should_discard_new_equation(unknowns::Set{<:ScalarSeriesSymbol}, N::Int)
+
+    Based on the unknowns that appear in an equation, and the order for which it has been
+    computed, whether or not to discard the equation. Equation should be discarded if 
+      * unknowns Set is empty
+      * coefficients of order > N appear in the unknowns
+"""
+function PDES_should_discard_new_equation(unknowns::Set{<:SeriesCoefficient}, N::Int)
+    
+    isempty(unknowns) && return true
+
+    for uk in unknowns
+        getOrder(uk) > N && return true
+    end
+
+    return false
+end
+
+"""
     compute_coefficients!(ps::PDESeries, N::Int; 
                           solver=symbolic_linear_solve, 
                           verbose::Int=0)
@@ -1586,13 +1619,13 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
 
     - `ps::PDESeries` -- the PowerSeries for which the coefficients should be computed
     - `N::Int` -- the order up to which the coefficients should be computed
-    - `solver=((eqs, xs) -> Symbolics.value.(Symbolics.symbolic_linear_solve(eqs, xs)))` --
-      The solver to be used
+    - `solver=LS.QRFactorization()` -- The solver to be used. The solver should take as 
+      input a LinearSolve.LinearProblem and return a Vector of the coefficients values. 
+      These values should be castable to the PDESeries T type parameter.
     - `verbose::Int=0` -- 
       * If verbose ≥ 1, indicates when an order is being computed and
       when it is done
       * If verbose ≥ 2, shows the equations and the unknowns for each order
-      * If verbose ≥ 3, displays the equations in fully parametric form
 
     ###Output
 
@@ -1601,22 +1634,14 @@ expected_unknowns(K::Array{ScalarSeriesSymbol}, D::Int, N::Int) = map(sss -> exp
 
     ###Notes
 
-    - This function provides an additionnal, named argument solver compared to other types
-      of PowerSeries. To compute the coefficients, the PDESeries first expand the equations
-      to the required order before solving them. If wanted, it is possible to change the
-      solver used. In that case, the new solver should take as arguments a Vector of 
-      Equation and a Vector of Num representing the unknown of this system of equations, 
-      and return a Vector of values for each unknown, in the same order as the Vector of 
-      unknowns. The type of these values should be castable to the type of the PDESeries
-
     - Since this function changes the PowerSeries the unknown relates to, one should not
       use the same unknown for different systems of equations. If required, this function
       and the use of its results can be encapsulated in a let ... end block to bypass this
       problem 
 """
-function compute_coefficients!(ps::PDESeries, N::Int; 
+function compute_coefficients!(ps::PDESeries{T}, N::Int; 
                                solver=((eqs, xs) -> Symbolics.value.(Symbolics.symbolic_linear_solve(eqs, xs))), 
-                               verbose::Int=0)
+                               verbose::Int=0) where T
 
     N ≤ ps.order && return
     
@@ -1625,62 +1650,54 @@ function compute_coefficients!(ps::PDESeries, N::Int;
 
     verbose ≥ 1 && println("Computing coefficients of order $N")
 
-    # first generate all equations and unknowns for order N
+    # first generate all expected unknowns of order up to N
+    unknowns = expected_unknowns(ps.scalar_series_ref, length(ps.variables), N)
+    nbr_coeffs = length(unknowns[1]) # will be used later
+    unknowns = [unknowns...;]
+
+    # then generate all equations of order N
     eqs = Equation[]
-    sym_eqs = Equation[]
-    unknowns = Set()
-    for (eq, idx_inf) in zip(ps.equations, ps.indices_inference)
-        if eq isa Equation
-            if idx_inf[1] == N
-                push!(eqs, eq)
-                unknowns = unknowns ∪ Set(idx_inf[2])
-            end
-        else # eq isa SymbolicSeriesEquation
-            expand_for_indices = idx_inf(N)
-            for idx in expand_for_indices
-                push!(eqs, getNum(eq, idx...))
-                verbose ≥ 3 && push!(sym_eqs, getSymbolics(eq, idx...))
-                unknowns = unknowns ∪ get_involved_selfseries_coefficients(eq, idx...)
+    for ((eq_idx, eq), maxIntOrd) in zip(enumerate(ps.equations), ps.maxIntegrationOrders)
+        expand_for_indices = generate_fullsym_indices_upto(N+maxIntOrd, get_nbr_vars(eq))
+        for idx in expand_for_indices
+            if idx ∉ ps.used_equations[eq_idx]
+                new_unknowns = get_involved_selfseries_coefficients(eq, idx...)
+                if !(PDES_should_discard_new_equation(new_unknowns, N))
+                    push!(eqs, getNum(eq, idx...))
+                    push!(ps.used_equations[eq_idx], idx)
+                end
             end
         end
     end
 
-    # check if unknowns matches the expected unknowns
-    ordered_unknowns = expected_unknowns(ps.scalar_series_ref, length(ps.variables), N)
-    flattened_ordered_unknowns = [ordered_unknowns...;]
-    @assert unknowns == Set(flattened_ordered_unknowns)
-
     if verbose ≥ 2
-        if verbose ≥ 3
-            println("Equation for order $N in symbolic form : ")
-            foreach(eq -> println(eq), sym_eqs)
-            println("Equations for order $N in reduced form : ")
-        end
-        verbose ≤ 2 && println("Equations for order $N : ")
+        println("Equations for order $N : ")
         foreach(eq -> println(eq), eqs)
         println("To solve with unknowns : ")
-        foreach(unknown -> print("$unknown, "), flattened_ordered_unknowns)
+        foreach(unknown -> print("$unknown, "), unknowns)
         println()
     end
 
+    # extract matrix A and vector b such that A.x = b where x is unknowns vector
+    A, b = extract_affine_transformation(eqs, getSymbolics.(unknowns), T)
+
     # solve
-    res = solver(eqs, getSymbolics.(flattened_ordered_unknowns))
+    prob = LS.LinearProblem(A, b)
+    res = LS.solve(prob, solver)
 
     # make room to add new coefficients 
-    number_of_new_coefficients = length(ordered_unknowns[1])
     old_length = length(ps.coefficients[1])
-    new_length = old_length + number_of_new_coefficients
+    new_length = old_length + nbr_coeffs
     foreach(idx -> resize!(ps.coefficients[idx], new_length), eachindex(ps.coefficients))
 
     # fill in with the new coefficients
-    for (sc, val) in zip(flattened_ordered_unknowns, res)
+    for (sc, val) in zip(unknowns, res)
         ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] = val
         sc.ps = ps
     end
 
     # update order
     ps.order = N
-        
     verbose ≥ 1 && println("Coefficients computed up to order $N")
 
     return
@@ -1727,13 +1744,14 @@ end
     ### Examples
 
     - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
-                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
                     equations::Vector{Union{Equation, SymbolicSeriesEquation}},
-                    maxIntegrationOrders::Vector{Int}) where T` -- default constructor
+                    maxIntegrationOrders::Vector{Int},
+                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}
+                    ) where T` -- default constructor
 
     - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
-                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
-                    equations::Vector{Union{Equation, SymbolicSeriesEquation}}) where T` 
+                    equations::Vector{Union{Equation, SymbolicSeriesEquation}},
+                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}) where T` 
       -- same as the default constructor but all maxIntegrationOrders are assumed to be 0.
 """
 mutable struct LocalizedPDESeries{T,D} <: PowerSeries{T,D}
@@ -1748,31 +1766,49 @@ mutable struct LocalizedPDESeries{T,D} <: PowerSeries{T,D}
 
     equations::Vector{SymbolicSeriesEquation}
     maxIntegrationOrders::Vector
+    unknown::Array{ScalarSeriesSymbol, D}
 
     function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num}, 
                                    center::Vector,
-                                   unknown::Union{Array{<:ScalarSeriesSymbol}, 
-                                                  ScalarSeriesSymbol},
+                                   scalar_series_ref::Array{<:ScalarSeriesSymbol, D},
                                    equations::Vector{<:SymbolicSeriesEquation},
-                                   maxIntegrationOrders::Vector{Int}) where {T}
+                                   maxIntegrationOrders::Vector{<:Int},
+                                   unknown::Union{Array{<:ScalarSeriesSymbol}, 
+                                                  ScalarSeriesSymbol}) where {T,D}
 
         _size = unknown isa AbstractArray ? size(unknown) : (1,)
         coefficients = map(x -> T[], CartesianIndices(_size))
 
-        new{T, unknown isa AbstractArray ? ndims(unknown) : 1}(seriesID, _size, variables, 
-        center, coefficients, -1, unknown isa AbstractArray ? unknown : [unknown], 
-        equations, maxIntegrationOrders)
+        ps = new{T, unknown isa AbstractArray ? ndims(unknown) : 1}(seriesID, _size, variables, 
+        center, coefficients, -1, scalar_series_ref,
+        equations, maxIntegrationOrders, unknown isa AbstractArray ? unknown : [unknown])
+
+        foreach(sss -> sss.ps=ps, scalar_series_ref)
+        return ps
     end
+
+end
+
+function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num}, 
+                               center::Vector,
+                               equations::Vector{<:SymbolicSeriesEquation},
+                               maxIntegrationOrders::Vector{<:Int},
+                               unknown::Union{Array{<:ScalarSeriesSymbol}, 
+                                              ScalarSeriesSymbol}) where T
+
+    scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, Tuple(idx), Dict()), unknown isa AbstractArray ? keys(unknown) : (1:1))
+
+    LocalizedPDESeries{T}(seriesID, variables, center, scalar_series_ref, equations, maxIntegrationOrders, unknown)
 
 end
 
 function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num},
                                center::Vector,
-                               unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol},
-                               equations::Vector{<:SymbolicSeriesEquation}) where T
+                               equations::Vector{<:SymbolicSeriesEquation},
+                               unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}) where T
 
     maxIntegrationOrders = zeros(Int, length(equations))
-    LocalizedPDESeries{T}(seriesID, variables, center, unknown, equations, maxIntegrationOrders)
+    LocalizedPDESeries{T}(seriesID, variables, center, equations, maxIntegrationOrders, unknown)
 end
 
 function expected_unknowns_upto(K::ScalarSeriesSymbol, D::Int, N::Int)
@@ -1782,28 +1818,11 @@ end
 
 expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -> expected_unknowns_upto(K, D, N), a)
 
-"""
-    LPDES_should_discard_new_equation(unknowns::Set{<:ScalarSeriesSymbol}, N::Int)
 
-    Based on the unknowns that appear in an equation, and the order for which it has been
-    computed, whether or not to discard the equation. Equation should be discarded if 
-      * unknowns Set is empty
-      * coefficients of order > N appear in the unknowns
-"""
-function LPDES_should_discard_new_equation(unknowns::Set{<:SeriesCoefficient}, N::Int)
-    
-    isempty(unknowns) && return true
-
-    for uk in unknowns
-        getOrder(uk) > N && return true
-    end
-
-    return false
-end
 
 """
     compute_coefficients!(ps::LocalizedPDESeries, N::Int; 
-                          solver=nothing)
+                          solver=nothing, verbose=false)
 
     Compute coefficients of ps up to order N.
 
@@ -1814,23 +1833,17 @@ end
     - `solver=QRFactorization()` -- The solver to be used. The solver should take as input
       a LinearSolve.LinearProblem and return a Vector of the coefficients values. These
       values should be castable to the LocalizedPDESeries T type parameter.
+    - `verbose=false` -- Whether or not to display a message once the coefficients have been computed
 
     ###Output
 
-    Stores new coefficients to ps, increases its order and changes the SeriesCoefficient
-    that relate to series :self and whose value have been computed to relate to ps instead
+    Stores new coefficients to ps and increases its order
 
-    ###Notes
-
-    - Since this function changes the PowerSeries the unknown relates to, one should not
-      use the same unknown for different systems of equations. If required, this function
-      and the use of its results can be encapsulated in a let ... end block to bypass this
-      problem 
 """
-function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFactorization()) where T
+function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFactorization(), verbose=false) where T
 
     # first generate all expected unknowns of order up to N
-    unknowns = expected_unknowns_upto(ps.scalar_series_ref, length(ps.variables), N) 
+    unknowns = expected_unknowns_upto(ps.unknown, length(ps.variables), N) 
     nbr_coeffs = length(unknowns[1]) # will be used later
     unknowns = [unknowns...;]
 
@@ -1840,7 +1853,7 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
         expand_for_indices = generate_fullsym_indices_upto(N+maxIntOrd, get_nbr_vars(eq))
         for idx in expand_for_indices
             new_unknowns = get_involved_selfseries_coefficients(eq, idx...; N=N)
-            if !(LPDES_should_discard_new_equation(new_unknowns, N))
+            if !(PDES_should_discard_new_equation(new_unknowns, N))
                 push!(eqs, getNum(eq, idx...; N=N))
             end
         end
@@ -1859,11 +1872,10 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
     # fill in with the new coefficients
     for (sc, val) in zip(unknowns, res)
         ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] = val
-        sc.ps = ps
     end
 
     # update order
     ps.order = N
-    println("Coefficients computed up to order $N. Coefficients of higher order deleted")
+    verbose && println("Coefficients computed up to order $N. Coefficients of higher order deleted")
 
 end
