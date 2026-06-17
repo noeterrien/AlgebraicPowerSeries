@@ -241,3 +241,35 @@ end
     generate_fullsym_indices(2, 3) = [[2,0,0], [1,1,0], [1,0,1], [0,2,0], [0,1,1], [0,0,2]]
 """
 generate_fullsym_indices(N::Int, D::Int)::Vector = map(idx -> convertIndices_trunc_to_fullsym(idx...), generate_trunc_indices(N,D))
+
+generate_trunc_indices_upto(N::Int, D::Int)::Vector = [[generate_trunc_indices(i, D) for i in 0:N]...;]
+generate_fullsym_indices_upto(N::Int, D::Int)::Vector = [[generate_fullsym_indices(i, D) for i in 0:N]...;]
+
+
+"""
+    extract_affine_transformation{T}(eqs::Vector{Equation}, vars::Vector{Num}) where T
+
+    Extracts matrix A and vector b such that A.x = b ⇔ eqs where x = vars
+
+    ###Input
+
+    - `eqs::Vector{Equation}` -- The vector of equations
+    - `vars::Vector{Num}` -- The vector of unknowns
+    - `T::Type` -- The type of the returned matrix and vector coefficients
+
+    ###Output
+
+    A,b such that eqs ⇔ A.vars = b 
+"""
+function extract_affine_transformation(eqs::Vector{Equation}, vars::Vector{Num}, T::Type)
+    exprs = [eq.lhs-eq.rhs for eq in eqs]
+
+    A_sym = Symbolics.jacobian(exprs, vars)
+    subst = Dict([v => 0 for v in vars])
+    b_sym = [-Symbolics.substitute(expr, subst) for expr in exprs]
+
+    A = T.(Symbolics.value.(A_sym))
+    b = T.(Symbolics.value.(b_sym))
+
+    A, b
+end

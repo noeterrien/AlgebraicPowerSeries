@@ -86,36 +86,73 @@ C_ts = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(3*x);1+2*cos(2*x);;
 compute_coefficients!(C_ts, N)
 C = SymbolicSeries(C_ts)
 
-K_symbols = selfseries_symbols(2)
-K_ss = SymbolicSeries(K_symbols, [0,0])
+let 
 
-# boundary conditions
-K = K_ss
-R1 = (ϵ(x) + μ(x))*K[1](x,x) ~ -C[2,1](x)
-R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
-@test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
-@test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][1,0], K[1][0,1], K[1][0,0]])
-@test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    K_symbols = selfseries_symbols(2)
+    K_ss = SymbolicSeries(K_symbols, [0,0])
 
-# main PDE
-K = K_ss(x,ξ)
-R3 = μ(x)*∂x(K[2]) + μ(ξ)*∂ξ(K[2]) ~ -∂ξ(μ(ξ))*K[2] + (C[1,2](ξ)-C[2,2](ξ))*K[1] + C[2,2](x)*K[1]
-R4 = μ(x)*∂x(K[1]) - ϵ(ξ)*∂ξ(K[1]) ~ ∂ξ(ϵ(ξ))*K[1] + (C[2,1](ξ)-C[1,1](ξ))*K[2] + C[2,2](x)*K[2]
-@test get_involved_selfseries_coefficients(R3, 0, 0) == Set([K_symbols[2][0,0], K_symbols[2][1,1], K_symbols[1][0,0], K_symbols[2][1,0]])
-@test get_involved_selfseries_coefficients(R4, 0, 0) == Set([K_symbols[1][1,0], K_symbols[1][1,1], K_symbols[1][0,0], K_symbols[2][0,0]])
+    # boundary conditions
+    K = K_ss
+    R1 = (ϵ(x) + μ(x))*K[1](x,x) ~ -C[2,1](x)
+    R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
+    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
+    @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][1,0], K[1][0,1], K[1][0,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
 
+    # main PDE
+    K = K_ss(x,ξ)
+    R3 = μ(x)*∂x(K[2]) + μ(ξ)*∂ξ(K[2]) ~ -∂ξ(μ(ξ))*K[2] + (C[1,2](ξ)-C[2,2](ξ))*K[1] + C[2,2](x)*K[1]
+    R4 = μ(x)*∂x(K[1]) - ϵ(ξ)*∂ξ(K[1]) ~ ∂ξ(ϵ(ξ))*K[1] + (C[2,1](ξ)-C[1,1](ξ))*K[2] + C[2,2](x)*K[2]
+    @test get_involved_selfseries_coefficients(R3, 0, 0) == Set([K_symbols[2][0,0], K_symbols[2][1,1], K_symbols[1][0,0], K_symbols[2][1,0]])
+    @test get_involved_selfseries_coefficients(R4, 0, 0) == Set([K_symbols[1][1,0], K_symbols[1][1,1], K_symbols[1][0,0], K_symbols[2][0,0]])
 
-# PDESeries
-getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []
-K = PDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4], [N -> [N], N -> [N], getindices, getindices])
-compute_coefficients!(K, N; verbose=2)
+    # PDESeries
+    getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []
+    K = PDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4], [N -> [N], N -> [N], getindices, getindices])
+    compute_coefficients!(K, N; verbose=2)
 
-Kᵛᵘ = K_symbols[1]
-Kᵛᵛ = K_symbols[2]
-Kᵛᵘ_matematica = [-1.11111, -0.109739, 0.109739, 0.737015/2, 1.89131/2, 1.15768/2, -1.18738/6, -5.98654/6, -6.99183/6, 16.6349/6]
-Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
-tol = 1e-5
-for i in 0:3, j in 0:i
-    @test ≈(getNum(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
-    @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+    Kᵛᵘ = K_symbols[1]
+    Kᵛᵛ = K_symbols[2]
+    Kᵛᵘ_matematica = [-1.11111, -0.109739, 0.109739, 0.737015/2, 1.89131/2, 1.15768/2, -1.18738/6, -5.98654/6, -6.99183/6, 16.6349/6]
+    Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
+    tol = 1e-5
+    for i in 0:3, j in 0:i
+        @test ≈(getNum(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+    end
+end
+
+let 
+
+    K_symbols = selfseries_symbols(2)
+    K_ss = SymbolicSeries(K_symbols, [0,0])
+    
+    # boundary conditions
+    K = K_ss
+    R1 = (ϵ(x) + μ(x))*K[1](x,x) ~ -C[2,1](x)
+    R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
+    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
+    @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][1,0], K[1][0,1], K[1][0,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    
+    # main PDE
+    K = K_ss(x,ξ)
+    R3 = μ(x)*∂x(K[2]) + μ(ξ)*∂ξ(K[2]) ~ -∂ξ(μ(ξ))*K[2] + (C[1,2](ξ)-C[2,2](ξ))*K[1] + C[2,2](x)*K[1]
+    R4 = μ(x)*∂x(K[1]) - ϵ(ξ)*∂ξ(K[1]) ~ ∂ξ(ϵ(ξ))*K[1] + (C[2,1](ξ)-C[1,1](ξ))*K[2] + C[2,2](x)*K[2]
+    @test get_involved_selfseries_coefficients(R3, 0, 0) == Set([K_symbols[2][0,0], K_symbols[2][1,1], K_symbols[1][0,0], K_symbols[2][1,0]])
+    @test get_involved_selfseries_coefficients(R4, 0, 0) == Set([K_symbols[1][1,0], K_symbols[1][1,1], K_symbols[1][0,0], K_symbols[2][0,0]])
+
+    #LocalizedPDESeries
+    K = LocalizedPDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4])
+    compute_coefficients!(K, N)
+
+    Kᵛᵘ = K_symbols[1]
+    Kᵛᵛ = K_symbols[2]
+    Kᵛᵘ_matematica = [-1.11111, -0.109739, 0.109739, 0.737015/2, 1.89131/2, 1.15768/2, -1.18738/6, -5.98654/6, -6.99183/6, 16.6349/6]
+    Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
+    tol = 1e-5
+    for i in 0:3, j in 0:i
+        @test ≈(getNum(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+    end
 end
