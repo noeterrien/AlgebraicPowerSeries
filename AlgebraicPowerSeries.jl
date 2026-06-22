@@ -424,6 +424,7 @@ end
     Number. Using this function, one gets the fully algebraic representation of x
 """
 getSymbolics(x::Number)::Number = x
+getSymbolics(::Nothing) = nothing
 getSymbolics(sc::SeriesCoefficient)::Number = sc.unique_sym
 
 """
@@ -434,11 +435,13 @@ getSymbolics(sc::SeriesCoefficient)::Number = sc.unique_sym
     numerically
 """
 getNum(x::Number)::Number = x
+getNum(::Nothing) = nothing
 function getNum(sc::SeriesCoefficient)::Number
     if sc.ps != :self
         if sc.ps.order < sc.indices[1]
             throw(ArgumentError("Cannot evaluate a SeriesCoefficient at order above the \
-                                 currently computed order"))
+                                 currently computed order. Involved SeriesCoefficient : 
+                                 $sc"))
         else
             sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
         end
@@ -446,6 +449,7 @@ function getNum(sc::SeriesCoefficient)::Number
         getSymbolics(sc)
     end
 end
+
 
 
 ############################ NlinearSeriesOperation ###########################
@@ -510,7 +514,7 @@ function getNum(op::NlinearSeriesOperation)::Number
         if arg isa ScalarSeriesSymbol
             throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
         else
-            isnothing(arg) || push!(to_aggregate, getNum(arg))
+            push!(to_aggregate, getNum(arg))
         end
     end
     getNum(op.func(to_aggregate))
@@ -1352,7 +1356,7 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
     
     op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1]*v[2], 
                                                             [(u[x_idx]+1), 
-                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):D]...,N=u[end]+1]])
+                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):D]...,N=(isnothing(u[end]) ? nothing : u[end]+1)]])
                                 , [index; :∞])
     
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = new_s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N+1))
@@ -1384,7 +1388,7 @@ function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
     op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1] == 0 ? 0 : v[2]/v[1], 
                                                             [u[x_idx],
                                                              u[x_idx] == 0 ? 0 :  
-                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end-1]...,N=u[end]-1]
+                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end-1]...,N=(isnothing(u[end]) ? nothing : u[end]-1)]
                                                             ])
                                 , [index; :∞])
 
@@ -1638,6 +1642,7 @@ end
       * If verbose ≥ 1, indicates when an order is being computed and
       when it is done
       * If verbose ≥ 2, shows the equations and the unknowns for each order
+      * If verbose ≥ 3, shows the discarded equations as well
 
     ###Output
 
@@ -1677,6 +1682,9 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
                 if !(PDES_should_discard_new_equation(new_unknowns, N))
                     push!(eqs, getNum(eq, idx...))
                     push!(ps.used_equations[eq_idx], idx)
+                elseif verbose ≥ 3
+                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...))")
+                    println("involved coefficients were $new_unknowns")
                 end
             end
         end
