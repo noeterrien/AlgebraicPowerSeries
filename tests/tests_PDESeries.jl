@@ -65,6 +65,16 @@ K = SymbolicSeries(selfseries_symbols(2), [0,0])
 @test getNum(test1_ss(1,y,y)[1,N=2]) ≈ 3
 @test getNum(test1_ss(1,y,y)[2,N=2]) ≈ 4
 
+test2_ts = TaylorExpansionSeries{Float64}(:t1, [x,y,z], [(x-1)^2 + 2(x-1)*y + y^2 + x-1 + z-2 + 3y*(z-2)], [1,0,2])
+compute_coefficients!(test2_ts, 10)
+test2_ss = SymbolicSeries(test2_ts)
+
+@test getNum(test2_ss(0,0,0)[N=2]) ≈ -2
+@test getNum(test2_ss(x,x,x)[0,N=2]) ≈ -3
+@test getNum(test2_ss(x,x,x)[1,N=2]) ≈ 6
+@test getNum(test2_ss(x,x,x)[2,N=2]) ≈ 7
+
+
 
 #-----------------------------------------------------Real use-case testing-----------------------------------------------
 @variables x ξ

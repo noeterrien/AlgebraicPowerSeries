@@ -1,4 +1,5 @@
 using Symbolics
+using LinearAlgebra
 import TaylorSeries
 import LinearSolve as LS
 include("utilitaries.jl")
@@ -730,6 +731,10 @@ end
 """
 function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) where D
 
+    if !(isnothing(N)) && +(args...) > N
+        return 0
+    end
+
     idx_subst = Dict{Symbol, Union{Int, Nothing}}([Symbol("idx$i") => v for (i,v) in enumerate(args)])
     idx_subst[:∞] = N
 
@@ -744,8 +749,8 @@ function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) whe
         elseif arg isa MultilinearSeriesOperation
             MultilinearSeriesOperation(arg.func, 
                                arg.arg, 
-                               substitution.(s.ref.arg_parameters), 
-                               substitution2.(s.ref.ranges))
+                               substitution.(arg.arg_parameters), 
+                               substitution2.(arg.ranges))
         elseif arg in keys(idx_subst)
             idx_subst[arg]
         else
@@ -857,7 +862,7 @@ Base.:-(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) - s
     will lead to unexpected results.
 """
 function Base.:*(t::Number, s::SymbolicSeries)
-    op = NlinearSeriesOperation(v -> v[1]*v[2], [t, s, :∞])
+    op = NlinearSeriesOperation(v -> v[1]*v[2], [t, s])
     SymbolicSeries(op, s.center, s.get_selfseries_coefficients)
 end
 """
@@ -931,7 +936,8 @@ end
                       One might use the same variables twice or more, but in that case, the
                       corresponding center components must all be the same if the user
                       whishes to compute it using a PDESeries. Otherwise, the coefficients
-                      can only be computed using a LocalizedPDESeries.
+                      can only be computed using a LocalizedPDESeries. In this case, the
+                      first center component will be used and the others disgarded.
         * constants : Can be the a component of the series' center. If so, the series can
                       then be computed using a PDESeries.
                       If the constant does not match series' center component, the series
@@ -1022,34 +1028,38 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                 else # the center components do not match => LocalizedPDESeries
 
                     arg2(idx::Int; params) = NlinearSeriesOperation(v -> +(v...), 
-                                               [
-                                                binom(idx, m)*
-                                                s[
+                                               [NlinearSeriesOperation(v -> v[1]*v[2]*v[3],
+                                                [binomial(idx, m),
+                                                 s[
                                                     params[1:other_x-1]...,
                                                     params[other_x]-m,
                                                     params[other_x+1:x_idx-1]...,
                                                     idx,
                                                     params[x_idx:end-1]..., 
                                                     N=params[end]
-                                                ]*
-                                                (s.center[other_x]-s.center[x_idx])^(idx-m)
-                                               for m in params[other_x]:idx
+                                                 ],
+                                                 (s.center[other_x]-s.center[x_idx])^(idx-m)]                                               
+                                               )                                                
+                                               for m in 0:min(params[other_x],idx)
                                                ])
                     op = MultilinearSeriesOperation(v -> +(v...), 
                                                     arg2, 
                                                     [generate_index_list(l-1);:∞], 
-                                                    [(Symbol("idx$other_x"),:∞)])
+                                                    [(0,:∞)])
                     
                     function get_selfseries_coefficients2(idcs::Vararg{Int}; N::Int)
                         res = Set()
-                        for idx in idcs[other_x]:N, m in idcs[other_x]:idx
-                            res = res ∪ s.get_selfseries_coefficients(
-                                idcs[1:other_x-1]...,
-                                idcs[other_x]-m,
-                                idcs[other_x+1:x_idx-1]...,
-                                idx,
-                                idcs[x_idx:end]...
-                            ; N)
+                        for idx in 0:N, m in 0:min(idcs[other_x],idx)
+                            if +(idcs[1:other_x-1]..., idcs[other_x]-m, idcs[other_x+1:x_idx-1]...,
+                                 idx, idcs[x_idx:end]...) ≤ N
+                                res = res ∪ s.get_selfseries_coefficients(
+                                    idcs[1:other_x-1]...,
+                                    idcs[other_x]-m,
+                                    idcs[other_x+1:x_idx-1]...,
+                                    idx,
+                                    idcs[x_idx:end]...
+                                ; N)
+                            end
                         end
                         res
                     end
@@ -1097,7 +1107,9 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                 function get_selfseries_coefficients4(idcs::Vararg{Int}; N)
                     res = Set()
                     for idx in 0:N
-                        res = res ∪ s.get_selfseries_coefficients(idcs[1:x_idx-1]..., idx, idcs[x_idx:end]...; N)
+                        if +(idcs[1:x_idx-1]..., idx, idcs[x_idx:end]...) ≤ N
+                            res = res ∪ s.get_selfseries_coefficients(idcs[1:x_idx-1]..., idx, idcs[x_idx:end]...; N)
+                        end
                     end
                     res
                 end
@@ -1416,7 +1428,7 @@ struct SymbolicSeriesEquation{D}
     RHS::SymbolicSeries{D}
 end
 
-get_nbr_vars(sse::SymbolicSeriesEquation{D}) where D = D
+get_nbr_vars(::SymbolicSeriesEquation{D}) where D = D
 
 function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D1}, Number}, 
                                 RHS::Union{EvaluatedSymbolicSeries{D2}, Number}) where {D1, D2}
@@ -1640,7 +1652,7 @@ end
       problem 
 """
 function compute_coefficients!(ps::PDESeries{T}, N::Int; 
-                               solver=((eqs, xs) -> Symbolics.value.(Symbolics.symbolic_linear_solve(eqs, xs))), 
+                               solver=LS.QRFactorization(), 
                                verbose::Int=0) where T
 
     N ≤ ps.order && return
@@ -1833,14 +1845,17 @@ expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -
     - `solver=QRFactorization()` -- The solver to be used. The solver should take as input
       a LinearSolve.LinearProblem and return a Vector of the coefficients values. These
       values should be castable to the LocalizedPDESeries T type parameter.
-    - `verbose=false` -- Whether or not to display a message once the coefficients have been computed
+    - `verbose=0` -- verbose level
+      * ≥ 1 -- print a message once the coefficients have been computed
+      * ≥ 2 -- shows the equations that are to be solved and the associated unknowns
+      * ≥ 3 -- shows the equations that were discarded
 
     ###Output
 
     Stores new coefficients to ps and increases its order
 
 """
-function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFactorization(), verbose=false) where T
+function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFactorization(), verbose=0) where T
 
     # first generate all expected unknowns of order up to N
     unknowns = expected_unknowns_upto(ps.unknown, length(ps.variables), N) 
@@ -1855,8 +1870,20 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
             new_unknowns = get_involved_selfseries_coefficients(eq, idx...; N=N)
             if !(PDES_should_discard_new_equation(new_unknowns, N))
                 push!(eqs, getNum(eq, idx...; N=N))
+            elseif verbose ≥ 3
+                println("discarded for fullsym idx [$idx] : $(getNum(eq, idx...; N=N))")
             end
         end
+    end
+
+    if verbose ≥ 2
+
+        println("Equations : ")
+        for eq in eqs
+            println(eq)
+        end
+
+        println("To solve for unknowns : $unknowns")
     end
 
     # extract matrix A and vector b such that A.x = b where x is unknowns vector
@@ -1876,6 +1903,6 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
 
     # update order
     ps.order = N
-    verbose && println("Coefficients computed up to order $N. Coefficients of higher order deleted")
+    verbose ≥ 1 && println("Coefficients computed up to order $N. Coefficients of higher order deleted")
 
 end
