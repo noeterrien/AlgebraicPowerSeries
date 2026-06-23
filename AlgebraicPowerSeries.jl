@@ -736,7 +736,7 @@ end
 function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) where D
 
     # truncation
-    if !(isnothing(N)) && +(args...) > N
+    if !(isnothing(N)) && D > 0 && +(args...) > N
         return 0
     end
 
@@ -839,7 +839,9 @@ Base.:+(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) + s
 
 function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? s[v[1:D]..., N=v[end]] + c[N=v[end]] : s[v[1:D]..., N=v[end]],
+    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? 
+                                NlinearSeriesOperation(v -> v[1] + v[2], [s[v[1:D]..., N=v[end]], c[N=v[end]]]) : 
+                                s[v[1:D]..., N=v[end]],
                                 [generate_index_list(D); :∞])
     get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) = s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
     SymbolicSeries(op, s.center, get_selfseries_coefficients)
@@ -869,7 +871,9 @@ Base.:-(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) - s
 
 function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? s[v[1:D]..., N=v[end]] - c[N=v[end]] : s[v[1:D]..., N=v[end]],
+    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? 
+                                NlinearSeriesOperation(v -> v[1] - v[2], [s[v[1:D]..., N=v[end]], c[N=v[end]]]) : 
+                                s[v[1:D]..., N=v[end]],
                                 [generate_index_list(D); :∞])
     get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) = s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
     SymbolicSeries(op, s.center, get_selfseries_coefficients)
@@ -997,12 +1001,8 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
     l = length(at)
     if l == _nbr_found # every argument has been used
 
-        if D > 0
-            variables = Num[at...]
-            return EvaluatedSymbolicSeries(s, variables)
-        else # s is constant
-
-        end
+        variables = Num[at...]
+        return EvaluatedSymbolicSeries(s, variables)
 
     else
 
@@ -1458,6 +1458,32 @@ function ∫(s::EvaluatedSymbolicSeries, a, b, x)
     # evaluate
     prim.series(up_bound...) - prim.series(low_bound...)
 end
+∫(arr::Array{<:EvaluatedSymbolicSeries}, a, b, x) = map(s -> ∫(s, a, b, x), arr)
+
+"""
+    ∫(s::EvaluatedSymbolicSeries{1}, a, b)
+
+    Computes the integral of s from a to b
+
+    ###Input
+
+    - `s::EvaluatedSymbolicSeries{1}`
+    - `a` -- The upper bound. Can be anything accepted by (::SymbolicSeries)(at...) but
+      (::SymbolicSeries)(a) must return an EvaluatedSymbolicSeries of at most 1 variable
+    - `b` -- The lower bound. Can be anything accepted by (::SymbolicSeries)(at...) but
+      (::SymbolicSeries)(a) must return an EvaluatedSymbolicSeries of at most 1 variable
+
+    ###Output
+    
+    An EvaluatedSymbolicSeries{D} where D = 0 or 1 depending on the input bounds.
+    The center of this series is the same as s.
+"""
+function ∫(s::EvaluatedSymbolicSeries{1}, a, b)
+    prim = (∫(s, s.variables[1])).series
+    prim(b) - prim(a)
+end
+∫(arr::Array{<:EvaluatedSymbolicSeries{1}}, a, b) = map(s -> ∫(s, a, b), arr)
+
 
 ################################ SymbolicSeriesEquation #############################
 
