@@ -1033,7 +1033,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
 
                     arg2(idx::Int; params) = NlinearSeriesOperation(v -> +(v...), 
                                                [NlinearSeriesOperation(v -> v[1]*v[2]*v[3],
-                                                [binomial(idx, m),
+                                                [binomial(Int128(idx), m),
                                                  s[
                                                     params[1:other_x-1]...,
                                                     params[other_x]-m,
@@ -1397,6 +1397,32 @@ function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
 
 end
 ∫(a::Array{<:EvaluatedSymbolicSeries}, x) = map(s -> ∫(s, x), a)
+
+"""
+    ∫(s::EvaluatedSymbolicSeries, a, b, x)
+
+    Integrate series s from a to b with respect to variable x
+
+    ###Input
+
+    - `s::EvaluatedSymbolicSeries` -- The series to integrate
+    - `a` -- lower bound (must be a constant)
+    - `b` -- upper bound (must be a constant)
+    - `x` -- The variable with respect to which the series should be integrated. Throws
+             an error if x is not among s variables
+"""
+function ∫(s::EvaluatedSymbolicSeries, a, b, x)
+    # compute primitive
+    prim = ∫(s, x)
+    
+    # compute bounds
+    x_idx = findfirst(y -> isequal(x,y), prim.variables)
+    up_bound = prim.variables[1:x_idx-1]..., b, prim.variables[x_idx+1:end]...
+    low_bound = prim.variables[1:x_idx-1]..., a, prim.variables[x_idx+1:end]...
+
+    # evaluate
+    prim.series(up_bound...) - prim.series(low_bound...)
+end
 
 
 ################################ SymbolicSeriesEquation #############################
