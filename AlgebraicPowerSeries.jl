@@ -735,10 +735,12 @@ end
 """
 function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) where D
 
+    # truncation
     if !(isnothing(N)) && +(args...) > N
         return 0
     end
 
+    # substitution
     idx_subst = Dict{Symbol, Union{Int, Nothing}}([Symbol("idx$i") => v for (i,v) in enumerate(args)])
     idx_subst[:∞] = N
 
@@ -835,6 +837,15 @@ end
 Base.:+(s::SymbolicSeries{D}, x::Number) where D = s + SymbolicSeries{D}(x)
 Base.:+(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) + s
 
+function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
+
+    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? s[v[1:D]..., N=v[end]] + c[N=v[end]] : s[v[1:D]..., N=v[end]],
+                                [generate_index_list(D); :∞])
+    get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) = s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
+    SymbolicSeries(op, s.center, get_selfseries_coefficients)
+end
+Base.:+(c::SymbolicSeries{0}, s::SymbolicSeries) = s+c
+
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     center = []
     for (c1, c2) in zip(s1.center, s2.center)
@@ -855,6 +866,15 @@ end
 
 Base.:-(s::SymbolicSeries{D}, x::Number) where D = s - SymbolicSeries{D}(x)
 Base.:-(x::Number, s::SymbolicSeries{D}) where D = SymbolicSeries{D}(x) - s
+
+function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
+
+    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? s[v[1:D]..., N=v[end]] - c[N=v[end]] : s[v[1:D]..., N=v[end]],
+                                [generate_index_list(D); :∞])
+    get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) = s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
+    SymbolicSeries(op, s.center, get_selfseries_coefficients)
+end
+Base.:-(c::SymbolicSeries{0}, s::SymbolicSeries) = s-c
 
 """
     Base.:*(t::Number, s::SymbolicSeries)
@@ -977,8 +997,12 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
     l = length(at)
     if l == _nbr_found # every argument has been used
 
-        variables = Num[at...]
-        return EvaluatedSymbolicSeries(s, variables)
+        if D > 0
+            variables = Num[at...]
+            return EvaluatedSymbolicSeries(s, variables)
+        else # s is constant
+
+        end
 
     else
 
@@ -1171,6 +1195,12 @@ Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::SymbolicSeries{D}) where D = s1 + s2
 Base.:+(s::EvaluatedSymbolicSeries{D}, x::Number) where D = s + (SymbolicSeries{D}(x))(s.variables...)
 Base.:+(x::Number, s::EvaluatedSymbolicSeries{D}) where D = (SymbolicSeries{D}(x))(s.variables...) + s
 
+Base.:+(s::EvaluatedSymbolicSeries, c::EvaluatedSymbolicSeries{0}) = (s.series+c.series)(s.variables...)
+Base.:+(c::EvaluatedSymbolicSeries{0}, s::EvaluatedSymbolicSeries) = s+c
+Base.:+(s::EvaluatedSymbolicSeries, c::SymbolicSeries{0}) = (s.series+c)(s.variables...)
+Base.:+(c::SymbolicSeries{0}, s::EvaluatedSymbolicSeries) = s+c
+
+
 """
     Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
 
@@ -1197,6 +1227,11 @@ Base.:-(s1::SymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D = s1(s2.v
 Base.:-(s1::EvaluatedSymbolicSeries{D}, s2::SymbolicSeries{D}) where D = s1 - s2(s1.variables...)
 Base.:-(s::EvaluatedSymbolicSeries{D}, x::Number) where D = s - (SymbolicSeries{D}(x))(s.variables...)
 Base.:-(x::Number, s::EvaluatedSymbolicSeries{D}) where D = (SymbolicSeries{D}(x))(s.variables...) - s
+
+Base.:-(s::EvaluatedSymbolicSeries, c::EvaluatedSymbolicSeries{0}) = (s.series-c.series)(s.variables...)
+Base.:-(c::EvaluatedSymbolicSeries{0}, s::EvaluatedSymbolicSeries) = s-c
+Base.:-(s::EvaluatedSymbolicSeries, c::SymbolicSeries{0}) = (s.series-c)(s.variables...)
+Base.:-(c::SymbolicSeries{0}, s::EvaluatedSymbolicSeries) = s-c
 
 """
     Base.:*(t::Number, s::EvaluatedSymbolicSeries)
@@ -1423,7 +1458,6 @@ function ∫(s::EvaluatedSymbolicSeries, a, b, x)
     # evaluate
     prim.series(up_bound...) - prim.series(low_bound...)
 end
-
 
 ################################ SymbolicSeriesEquation #############################
 
