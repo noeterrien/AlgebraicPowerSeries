@@ -109,6 +109,8 @@ convertIndices_fullsym_to_trunc(I::Vararg{Int64}) = [+(I[i:end]...) for i in eac
 
 convertIndices_trunc_to_fullsym(I::Vararg{Int64}) = begin J = [I..., 0] ; [J[i]-J[i+1] for i in eachindex(I)] end
 
+convertIndices_fullsym_to_lin(I::Vararg{Int64}) = convertIndices_trunc_to_lin(convertIndices_fullsym_to_trunc(I...)...)
+
 """
     decode_coeffIndex(u_sym::Num)::Tuple{Vector{Int}, Int}
 
@@ -236,7 +238,7 @@ end
 """
     generate_fullsym_indices(N::Int, D::Int)
 
-    Generates the fully symetric indices of order N and dimension D
+    Generates the fully symetric indices of order N and D variables
     For instance, 
     generate_fullsym_indices(2, 3) = [[2,0,0], [1,1,0], [1,0,1], [0,2,0], [0,1,1], [0,0,2]]
 """

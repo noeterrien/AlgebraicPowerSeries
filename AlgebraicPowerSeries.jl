@@ -414,6 +414,122 @@ function compute_coefficients!(ps::TaylorExpansionSeries{T}, N::Int) where T
     ps.order=N
 end
 
+#-----------------------------------------------------------TranslatedSeries---------------------------------------------------------------
+
+"""
+    TranslatedSeries{T,D} <: PowerSeries{T,D}
+
+    A concrete type representing a PowerSeries translated at a new center
+
+    ### Fields
+
+    - `seriesID::Symbol` -- A unique reference to the series that might be used to choose
+      unique IDs for SeriesCoefficient
+    - `size::NTuple{D,Int}` -- size of the series (similar to Array)
+    - `variables::Vector{Num}` -- The series variables, for instance x in Σaᵢxⁱ
+    - `center::Vector` -- The series new center
+    - `coefficients::Array{Vector{T},D}` -- The series coefficients
+    - `order::Int` -- The order to which coefficients were already computed (-1 means none)
+    - `scalar_series_ref::Array{ScalarSeriesSymbol, D}` -- An array of 
+      ScalarSeriesSymbol that is used to easily create and access SeriesCoefficient
+    - `ref::PowerSeries{T,D}` -- The PowerSeries to translate
+
+    ### Examples
+
+    - `TranslatedSeries(seriesID::Symbol, ref::PowerSeries, new_center::Vector)` -- default 
+      constructor
+"""
+mutable struct TranslatedSeries{T,D} <: PowerSeries{T,D}
+    
+    seriesID::Symbol
+    size::NTuple{D,Int}
+    variables::Vector{Num}
+    center::Vector
+    coefficients::Array{Vector{T},D}
+    order::Int
+    scalar_series_ref::Array{ScalarSeriesSymbol, D}
+    ref::PowerSeries{T,D}
+
+    function TranslatedSeries(seriesID::Symbol, ref::PowerSeries{T,D}, new_center::Vector) where {T,D}
+
+        length(new_center) == length(ref.center) || throw(ArgumentError("New center must \
+                                                    have the same size as previous center"))
+
+
+        coeffs = map(x -> T[], CartesianIndices(ref.size))
+        scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, Tuple(idx), Dict()), keys(coeffs))
+
+        ps = new{T,D}(seriesID,
+                 ref.size,
+                 ref.variables,
+                 new_center,
+                 coeffs,
+                 -1,
+                 scalar_series_ref,
+                 ref)
+        for sss in scalar_series_ref
+            sss.ps = ps
+        end
+        return ps
+    end
+end
+
+
+"""
+    compute_coefficients!(ps::TranslatedSeries, N::Int; trunc_order=N)
+
+    Computes the coefficients of a TranslatedSeries up to order N. Translating a series
+    requires truncation. To compute the coefficients of a translated series, the reference
+    series' coefficients are first computed up to order trunc_order and then used to
+    compute an approximation of the TranslatedSeries coefficients, truncated at order
+    trunc_order.
+
+    ###Input 
+    
+    - `ps::TranslatedSeries` -- a TranslatedSeries
+    - `N::Int` -- The order up to which coefficients should be computed
+    - `trunc_order=N` -- The truncation order. Cannot be smaller than N
+
+    ###Output
+
+    The order up to which coefficients have been computed
+"""
+function compute_coefficients!(ps::TranslatedSeries, N::Int; trunc_order=N)
+
+    # first compute coefficients of the series to translate
+    compute_coefficients!(ps.ref, trunc_order)
+
+    # generate the indices of the coefficients to compute
+    nbr_vars = length(ps.variables)
+    indices = generate_fullsym_indices_upto(N, nbr_vars)
+
+    # make room for the coefficients
+    nbr_coeffs = length(indices)
+    foreach(idx -> resize!(ps.coefficients[idx], nbr_coeffs), eachindex(ps.coefficients))
+
+    # compute the new coefficients and fill in
+    for scalar_idx in CartesianIndices(ps.size)
+        for idx in indices
+            # create ranges
+            rgs = map(i -> idx[i]:trunc_order, 1:nbr_vars)
+            coeff = 0
+            for k in CartesianIndices(tuple(rgs...))
+                if +(Tuple(k)...) ≤ trunc_order # truncate
+                    binoms = *([binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
+                    ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
+                    centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
+                    coeff += binoms*ref_coeff*centers
+                end
+            end
+            ps.coefficients[scalar_idx][convertIndices_fullsym_to_lin(idx...)] = coeff
+        end
+    end
+
+    # change order
+    ps.order = N
+
+end
+
 
 #--------------------------------------------Series defined by Partial Differential Equations----------------------------------------------
 
