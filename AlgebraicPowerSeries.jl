@@ -1,5 +1,4 @@
 using Symbolics
-using LinearAlgebra
 import TaylorSeries
 import LinearSolve as LS
 include("utilitaries.jl")
