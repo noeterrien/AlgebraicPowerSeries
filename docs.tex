@@ -1,0 +1,286 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---- Packages ----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm,amsfonts}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{parskip}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\usepackage{tikz}
+\tikzset{%
+    baseline,
+    inner sep=2pt,
+    minimum height=12pt,
+    rounded corners=2pt  
+}
+\newcommand{\code}[1]{\mbox{%
+    \ttfamily
+    \tikz \node[anchor=base,fill=black!12]{#1};% 
+    }}
+
+\usepackage{array}
+
+
+% ---- Shortcuts ----
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\eps}{\varepsilon}
+
+% ---- Propositions ----
+\newcommand{\prop}[1]{
+  \fbox{
+    \parbox{\textwidth}{\textbf{Proposition : } #1}
+  }
+}
+
+\title{\Huge{\textbf{AlgebraicPowerSeries documentation}}}
+\author{Noé Terrien}
+\date{\today}
+
+
+\begin{document}
+\maketitle
+\vspace{1em}
+\tableofcontents
+
+\section{Introduction}
+
+\subsection{Objectives}
+
+This module introduces an algebraic representation of potentially infinite power series and arrays of power series of any number of variables. These series are represented by PowerSeries objects, which contain the instructions to compute the coefficients of the series up to an arbitrarily high order (though that may come at the cost of some algorithmic complexity).
+
+It was primarily developped to compute backstepping kernels (see ~\cite{krstic-book} for details on this method), but it should technically work to solve a number of well-posed Partial Differential Equations. It was tested on multiple examples (see \nameref{sec:exs} section), correctly reproducing results from matematica but possible bugs may remain. Users are encouraged to do their own tests to verify that everything works as expected for their personal use.
+
+
+\subsection{Julia version}
+
+This module was developped in Julia 1.12.6
+
+\subsection{Dependencies}
+
+This module makes use of several pre-existing Julia modules:
+
+\begin{itemize}
+    \item Symbolics: v7.24.2
+    \item TaylorSeries: v0.21.10
+    \item LinearSolve: v3.85.2
+\end{itemize} 
+
+These can be installed by typing \code{]} in the Julia REPL and then using the command \\ 
+\code{add Symbolics TaylorSeries LinearSolve}
+
+Examples use Pluto notebooks and GLMakie for display
+
+\begin{itemize}
+    \item Pluto: v0.20.27
+    \item PlutoUI: v0.7.83
+    \item GLMakie: v0.13.10
+\end{itemize}
+
+These can be installed by typing \code{]} in the Julia REPL and then using the command \\ 
+\code{add Pluto PlutoUI GLMakie}
+
+Tests and benchmarking rely on Julia Test and BenchmarkTools modules
+
+\begin{itemize}
+    \item Test: v1.11.0
+    \item BenchmarkTools: v1.8.0
+\end{itemize}
+
+These can be installed by typing \code{]} in the Julia REPL and then using the command \\ 
+\code{add Test BenchmarkTools}
+
+\subsection{Examples}
+\label{sec:exs}
+
+Several examples are provided in the form of Pluto notebooks in the "examples" folder. To start Pluto, run \code{import Pluto} and then \code{Pluto.run()} in your REPL. Then open the notebook you want. Alternatively, you can also run the "<example>.jl" files directly.
+
+These examples were used to assess the reliability of the module by reproducing the results from matematic notebooks presented in ~\cite{vazquez-chen-qiao-krstic}
+
+\begin{center}
+    \begin{tabular}{ | m{100pt} | m{340pt} | } 
+        \hline
+        <example>.jl & PDE solved \\
+        \hline
+        1-D reaction diffusion equation with space-varying reaction & Example 1 : 
+        $$\begin{cases}
+            K_{xx}(x, \xi) - K_{\xi \xi} = \frac{\lambda(\xi)+c}{\eps}K(x,\xi) \\
+            K(x,x) = -\frac{1}{2\eps}\int_{0}^{x}(\lambda(\xi)+c)d\xi \\
+            K(x,0) = 0
+        \end{cases}$$ \\
+        \hline
+        coupled 1D kernel & Example 4 : 
+        $$\begin{cases}
+            \mu(x)K^{vv}_x + \mu(\xi)K^{vv}_\xi = -\mu'(\xi)K^{vv} + c_2(\xi)K^{vu} + [c_4(x)-c_4(\xi)]K^{vu} \\
+            \mu(x)K^{vu}_x - \eps(\xi)K^{vu}_\xi = -\eps'(\xi)K^{vu} + c_3(\xi)K^{vv} + [c_4(x)-c_1(\xi)]K^{vv} \\
+            K^{vv}(x,0) = \frac{q\eps(0)}{\mu(0)}K^{vu}(x,0) \\
+            (\eps(x) + \mu(x))K^{vu}(x,x) = -c_3(x)
+        \end{cases}$$ \\
+        \hline
+        2x2 1-D linear hyperbolic system & Inspired from ~\cite{coron-vazquez}
+        $$\begin{cases}
+            \Sigma(x)K_x(x,y) + K_y(x,y)\Sigma(y) = K(x,y)[C(y)-\Sigma'(y)] - C_0(x)K(x,y) \\
+            K(x,x)\Sigma(x) - \Sigma(x)K(x,x) = C(x) - C_0(x) \\
+            K(x,0)\Sigma(0)\begin{pmatrix}
+                q \\ 1
+            \end{pmatrix} = 0
+        \end{cases}$$ 
+        where
+        $$\Sigma = \begin{pmatrix}
+            -\eps_1 & 0 \\ 0 & \eps_2
+        \end{pmatrix}$$ with $\eps_1, \eps_2 > 0$ and 
+        $$C = \begin{pmatrix}
+            c_1 & c_2 \\ c_3 & c_4
+        \end{pmatrix} \text{ and } C_0 = \begin{pmatrix}
+            c_1 & 0 \\ 0 & c_4
+        \end{pmatrix}$$ \\
+        \hline
+        localized power series - 1-D reaction diffusion equation & Illustrates the use of LocalizedPDESeries with Example 1 \\
+        \hline
+        fixing divergence in 1-D reaction diffusion equation with space-varying reaction & Illustrates the use of TranslatedSeries to avoid using LocalizedPDESeries using divergent Example 1. Includes a benchmark to compare performance differences\\
+        \hline
+    \end{tabular}
+\end{center}
+
+\subsection{Benchmarks}
+
+%TODO :
+Some benchmarks will be proposed in the future to compare different solvers for PDESeries that are hardware-dependent or trying to use sparsity
+
+\section{User guide}
+
+This user guide explains how to use the objects defined in "AlgebraicPowerSeries.jl" and "utilitaries.jl" files to expand functions into their Taylor series, solve Partial Differential Equations (PDE) and build the resulting functions' approximations.
+
+\subsection{PowerSeries}
+
+\code{PowerSeries\{T,D\}} is an abstract type representing power series, or to be more precise, an \code{Array\{D\}} of power series. The common interface accross every concrete \code{PowerSeries} allows them to perform a number of operations:
+
+\begin{itemize}
+    \item \code{compute\_coefficients!} -- PowerSeries is an interface to represent abstract power series. However, most uses require accessing its coefficients. To do so, these coefficients must first be computed up to a given order N by using \code{compute\_coefficients!(ps, N)} where ps is a PowerSeries.
+    \item \code{ps.coefficients} -- The first way of accesing the previously computed coefficients is to access the \code{coefficients} attribute of the PowerSeries. This array is a \code{Array\{D, Vector\{T\}\}}. Since a PowerSeries represents in reality an array of scalar PowerSeries, to access the coefficients this way, one must first access the corresponding scalar series. The coefficients are then sorted in increasing order of their coefficients (i.e : $a_1 + a_2x + a_3y + a_4x^2 + a_5xy + a_6y^2 + ...$).
+    For instance, one could do \code{ps.coefficients[1,2][3]} to access the coefficient of $y$ in a two variables series $x,y$ at the scalar index $(1,2)$
+    \item \code{getindex} -- The \code{getindex} method is another way of accessing a series coefficients. Calling for instance \code{ps[1,2]} will return a \code{ScalarSeriesSymbol} that can then be called using the \code{getindex} method an additionnal time which will return a \code{SeriesCoefficient}. Calling for instance \code{ps[1,2][3]} will return the corresponding \code{SeriesCoefficient}. Using then \code{getNum} on this \code{SeriesCoefficient} will return its value if it has already been computed and throw an error otherwise. Thus, \code{getNum(ps[1,2][3])} is the same as \code{ps.coefficients[1,2][3]}. 
+    See more details on \nameref{sec:sss} and \nameref{sec:sc} in the detailed documentation.
+    \item \code{build\_matrix\_elt} -- Given a \code{PowerSeries ps}, it is possible to retrieve the function it represents (or rather its polynomial approximation). To do so, one can use \\ \code{build\_matrix\_elt(ps)}. This will return an \code{Array\{D\}} of functions of the \code{PowerSeries}' variables. Additionnaly, one can eventually provide a second argument N to only compute the polynomial function up to degree N. If N is greater than the order up to which the series has been computed, an error will be thrown
+    \item \code{build} -- This works similarly to \code{build\_matrix\_elt} but instead of returning an array of functions, it returns a function that returns arrays. However, this seems to be less performant and the returned functions takes longer to evaluate
+\end{itemize}
+
+Most PowerSeries require a type parameter T to be constructed, which is the type the coefficients will be stored as. Some PowerSeries will have other uses for it. T must be a concrete type. 
+
+In addition, each PowerSeries as an ID, stored as the \code{seriesID::Symbol} attribute. This ID should be different for all series and is used to generate a unique representation of each of the series' coefficients.
+
+
+\subsection{TaylorExpansionSeries}
+
+\code{TaylorExpansionSeries\{T,D\}} is a subtype of \code{PowerSeries\{T,D\}} used to represent a power series that is the Taylor expansion of a function $f : \R^m \longrightarrow \R^{n_1\times n_2\times \dots \times n_D}$
+
+To create a \code{TaylorExpansionSeries}, one will need to provide several arguments to its constructor : 
+
+\begin{itemize}
+    \item The coefficients' type \code{T}
+    \item A \code{seriesID}
+    \item Its \code{variables}, which must come from the "Symbolics" package. They can be created using \code{@variables x y z} for instance and must be given as a \code{Vector{Num}}
+    \item The function it represents. This must be an \code{Array\{D\}} of expressions that use the previously provided variables
+    \item The \code{center} of the series, as a \code{Vector} that has the same length as the \code{variables} Vector.
+\end{itemize}
+
+Here is an example of how to use this constructor to developp the $sin$ function around $0$:
+
+\code{sin\_ps = TaylorExpansionSeries\{Float64\}(:sin, [x], [sin(x)], [0])}
+
+One can then use it like any other \code{PowerSeries}, by first computing its coefficients up to a given order N:
+
+\code{compute\_coefficients!(sin\_ps, 30)}
+
+In the background, this method computes the coefficients using the \code{TaylorSeries} Julia module, allowing it to very rapidly compute the Taylor expansion of the function.
+
+
+
+\subsection{TranslatedSeries}
+
+Sometimes, one might want to change a \code{PowerSeries}' center. For instance, this can, in some cases, change the radius of convergence of the series. This is done using a \code{TranslatedSeries}. Its constructor is pretty simple : 
+
+\code{TranslatedSeries(seriesID::Symbol, ref::PowerSeries, new\_center::Vector)}
+
+This object stores a referenced \code{PowerSeries} ref and a new center to be able to compute the coefficients of the series around the new center, though at the cost of a loss of precision.
+
+For the \code{compute\_coefficients!} method to work in a mathematically correct way, there must exist a continuous path between both centers, inside the domain of holomorphy of the function represented by the \code{ref} series. The formula that is used can be deduced from Cauchy's integral formula (see ~\cite{severalcomplexvariables}) which gives : 
+
+\prop{If $f$ is holomorphic on some connected open set $\Omega \subset \mathbb{C}^m$, $c, c^* \in \Omega$ and 
+$$f(z_1, \dots, z_m) = \sum_{\alpha_1=0}^{+\infty} \sum_{\alpha_2=0}^{+\infty} \dots \sum_{\alpha_m=0}^{+\infty} a_{\alpha_1, \alpha_2, \dots, \alpha_m} (z_1-c_1)^{\alpha_1}(z_2-c_2)^{\alpha_2} \dots (z_m-c_m)^{\alpha_m}$$
+on some polydisk centered at $c=(c_1, ... c_m)$ and included in $\Omega$. Then there exists a non-empty polydisk $\mathcal{D} \subset \Omega$ centered at $c^*=(c^*_1, \dots, c^*_2)$ such that
+$$\forall z \in \mathcal{D}, f(z_1, \dots, z_m) = \sum_{\alpha_1=0}^{+\infty} \sum_{\alpha_2=0}^{+\infty} \dots \sum_{\alpha_m=0}^{+\infty} a^*_{\alpha_1, \alpha_2, \dots, \alpha_m} (z_1-c^*_1)^{\alpha_1}(z_2-c^*_2)^{\alpha_2} \dots (z_m-c^*_m)^{\alpha_m}$$
+And for any of these polydisks, we have $\forall (\alpha_1, \alpha_2, \dots, \alpha_m) \in \N^m$, 
+$$a^*_{\alpha_1, ..., \alpha_m} = \sum_{k_1=\alpha_1}^{+\infty} \sum_{k_2=\alpha_2}^{+\infty} \dots \sum_{k_m=\alpha_m}^{+\infty} \binom{k_1}{\alpha_1} \dots \binom{k_m}{\alpha_m} a_{k_1, \dots, k_m} (c^*_1-c_1)^{k_1-\alpha_1} \dots (c^*_m-c_m)^{k_m-\alpha_m}$$
+}
+
+As mentioned before, this way of computing the coefficients causes a loss of precision, as the coefficients expressions must be truncated. Furthermore, in the above formula, coefficients of a given order are computed using only coefficients of the orders above. Consequently, the loss of precision is more important on coefficients of higher orders. To compute these coefficients up to a given order N, the referenced \code{PowerSeries} coefficients are first computed up to order N, and then every coefficient's expression is truncated to use only these coefficients. If needed, it is however possible to give an additionnal named argument \code{trunc\_order} to the \code{compute\_coefficients!} method of \code{TranslatedSeries} to compute the coefficients of the referenced series up to this \code{trunc\_order} and then use these additionnal coefficients to compute the \code{TranslatedSeries}' coefficients up to order N.
+
+\subsection{PDESeries and LocalizedPDESeries}
+
+\subsubsection{The "self" series}
+
+\subsubsection{Writing the partial differential equation}
+
+\subsubsection{Constructing PDESeries and LocalizedPDESeries}
+
+\section{Detailed documentation}
+
+\subsection{PowerSeries}
+
+\subsubsection{PowerSeries attributes}
+
+\subsubsection{ScalarSeriesSymbol}
+\label{sec:sss}
+
+\subsubsection{SeriesCoefficient}
+\label{sec:sc}
+
+\subsubsection{Coefficients indexing : lin, trunc, fullsym}
+
+\subsection{Series defined by Partial Differential Equations}
+
+\subsubsection{SymbolicSeries, EvaluatedSymbolicSeries and SymbolicSeriesEquation}
+
+\subsubsection{NlinearSeriesOperation}
+
+\subsubsection{MultilinearSeriesOperation}
+
+\subsubsection{getindex method on SymbolicSeries}
+
+\subsubsection{getNum and getSymbolics method}
+\label{sec:getNumSym}
+
+\subsubsection{Evaluating a SymbolicSeries}
+
+\subsubsection{Operations defined on SymbolicSeries}
+
+\subsubsection{Operations defined on EvaluatedSymbolicSeries}
+
+\subsubsection{The compute\_coefficients! method}
+
+\begin{thebibliography}{99}
+
+\bibitem{krstic-book}
+M.~Krstic and A.~Smyshlyaev, \emph{Boundary Control of PDEs: A Course on Backstepping Designs}, SIAM, Philadelphia, 2008.
+
+
+\bibitem{vazquez-chen-qiao-krstic}
+R.~Vazquez, G.~Chen, J.~Qiao, and M.~Krstic, ``The power series method to compute backstepping kernel gains: Theory and practice,'' in \emph{Proc.\ 63rd IEEE Conference on Decision and Control (CDC)}, 2024.
+
+\bibitem{coron-vazquez}
+J.-M.~Coron, R.~Vazquez, M.~Krstic, and G.~Bastin, ``Local exponential $H^2$ stabilization of a $2 \times 2$ quasilinear hyperbolic system using backstepping,'' \emph{SIAM J.\ Control Optim.}, vol.~51, pp.~2005--2035, 2013.
+
+\bibitem{severalcomplexvariables}
+Jiří Lebl, ``Tasty Bits of Several Complex Variables, a whirlwind tour of the subject''
+
+
+
+\end{thebibliography}
+
+\end{document}
