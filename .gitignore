@@ -1,0 +1,13 @@
+examples/mathematical\ developments
+old_tests\ and\ personal\ tests/
+@v1.12.6/
+
+docs.aux
+docs.fdb_latexmk
+docs.log
+docs.out
+docs.toc
+docs.synctex.gz
+docs.fls
+
+examples/*.png
