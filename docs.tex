@@ -3,6 +3,8 @@
 % ---- Packages ----
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{textcomp}
+\usepackage{newunicodechar}
 \usepackage{amsmath,amssymb,amsthm,amsfonts}
 \usepackage{mathtools}
 \usepackage{hyperref}
@@ -24,6 +26,7 @@
     }}
 
 \usepackage{array}
+\usepackage[cache=false]{minted}
 
 
 % ---- Shortcuts ----
@@ -101,6 +104,8 @@ These can be installed by typing \code{]} in the Julia REPL and then using the c
 Several examples are provided in the form of Pluto notebooks in the "examples" folder. To start Pluto, run \code{import Pluto} and then \code{Pluto.run()} in your REPL. Then open the notebook you want. Alternatively, you can also run the "<example>.jl" files directly.
 
 These examples were used to assess the reliability of the module by reproducing the results from matematic notebooks presented in ~\cite{vazquez-chen-qiao-krstic}
+
+\text
 
 \begin{center}
     \begin{tabular}{ | m{100pt} | m{340pt} | } 
@@ -223,13 +228,167 @@ As mentioned before, this way of computing the coefficients causes a loss of pre
 
 \subsection{PDESeries and LocalizedPDESeries}
 
-
+\code{PDESeries} and \code{LocalizedPDESeries} allow the user to generate series as a result of well-posed partial differential equations. 
 
 \subsubsection{The "self" series}
 
+To construct a series out of a partial differential equation, one has to first write down the partial differential equation, and the unknown for which it has to be solved. This unknown is defined with the help of some particular \code{ScalarSeriesSymbol} objects. \code{ScalarSeriesSymbol} usually refer to a \code{PowerSeries}. However, it is possible to have them refer to a \code{Symbol} instead. This is used to create \code{ScalarSeriesSymbol} that refer to a series that has not been created yet. In this case, the \code{Symbol} used is \code{:self}, which indicates that the series exists by itself (see \nameref{sec:sss} for more details)
+
+It is possible to create \code{ScalarSeriesSymbol} or an \code{Array{ScalarSeriesSymbol}} by using the function \code{selfseries\_symbols}:
+\code{selfseries\_symbols()} will generate a \code{ScalarSeriesSymbol} that refers to series \code{:self} while \code{selfseries\_symbols($n_1, n_2, \dots, n_D$)} will generate an \\ \code{Array{ScalarSeriesSymbol}, D} of size $n_1 \times n_2 \times \dots \times n_D$ of that refer to series \code{:self}
+
 \subsubsection{Writing the partial differential equation}
 
+Writing the partial differential equations, with its boundary conditions is done using \\ \code{SymbolicSeries}, for which a number of operations have been defined (multiplication, addition, substraction, equality, \dots) to represent operations on power series. Each \code{SymbolicSeries} represents a \textbf{scalar} power series, making it possible to use Julia native array operations to write multiple equations at once.
+
+\code{SymbolicSeries}, or \code{Array{SymbolicSeries}} can be constructed in several ways: 
+\begin{itemize}
+    \item \code{SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)} -- creates a \\ \code{SymbolicSeries} from a ScalarSeriesSymbol, around a given \code{center}
+    \item \code{SymbolicSeries(sss::Array{<:ScalarSeriesSymbol}, center::Vector)} -- creates an \\ \code{Array{SymbolicSeries}} around the same \code{center}
+    \item \code{SymbolicSeries(ps::PowerSeries)} -- creates either a \code{SymbolicSeries} or an \\ \code{Array{SymbolicSeries}} depending on the size of the \code{ps} from a given \code{PowerSeries}.
+    \item \code{SymbolicSeries\{D\}(x::Number)} -- creates a constant \code{SymbolicSeries} of \code{D} variables. This can be useful when creating an \code{Array} of \code{SymbolicSeries} from \\ \code{SymbolicSeries} and constants at the same time.
+\end{itemize}
+
+To write equations, several operations are implemented between \code{SymbolicSeries} and/or constants (\code{SymbolicSeries\{D\}} represents a \code{SymbolicSeries} of \code{D} variables):
+
+\begin{center}
+    \begin{tabular}{ | m{139pt} | m{139pt} | m{139pt} | } 
+        \hline
+        operation & first argument & second argument \\
+        \hline
+        + & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{SymbolicSeries\{D\}} & \code{Number} \\
+          & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
+        \hline
+        - & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{SymbolicSeries} & \code{Number} \\
+          & \code{SymbolicSeries} & \code{SymbolicSeries\{0\}} \\
+          & \code{SymbolicSeries}      & -------------------------- \\
+        \hline
+        * & \code{SymbolicSeries} & \code{Number} \\
+          & \code{SymbolicSeries\{1\}} & \code{SymbolicSeries\{1\}} \\
+        \hline
+        / & \code{SymbolicSeries} & \code{Number} \\
+        \hline
+    \end{tabular}
+\end{center}
+
+All operations +, -, * involving a \code{SymbolicSeries} and a constant (either \code{Number} or \\ \code{SymbolicSeries\{0\}}) can be used the other way around.
+
+This set of operations is however quite limited. To access a wider range of operations, one needs to be able to evaluate \code{SymbolicSeries} in some variables and / or constants. If s is a \code{SymbolicSeries{D}}, this can simply be done using \code{s($x_1, x_2, \dots, x_D$)} where $x_1, x_2, \dots, x_D$ can either be variables (obtained with the \code{@variables} macro) or constants. %TODO : Polynomials
+
+Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of additionnal operations: 
+
+\begin{center}
+    \begin{tabular}{ | m{100pt} | m{169pt} | m{149pt} | } 
+        \hline
+        operation & first argument & second argument \\
+        \hline
+        + & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
+        \hline
+        - & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
+          & \code{EvaluatedSymbolicSeries}      & -------------------------- \\
+        \hline
+        * & \code{EvaluatedSymbolicSeries} & \code{Number} \\
+          & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
+        \hline
+        / & \code{EvaluatedSymbolicSeries} & \code{Number} \\
+        \hline
+        \code{$\partial_x$} where \code{$\partial_x$} is a \code{Differential} object from \code{Symbolics} & \code{EvaluatedSymbolicSeries} where the variable of the \code{Differential} is among the series variables & -------------------------- \\ 
+          & \code{Array{<:EvaluatedSymbolicSeries}} & -------------------------- \\
+        \hline
+    \end{tabular}
+\end{center}
+
+\begin{center}
+    \begin{tabular}{ | m{100pt} | m{169pt} | m{149pt} | } 
+        \hline
+        $\int$ & \code{EvaluatedSymbolicSeries} & $x$, a variable of the series\\
+          & \code{EvaluatedSymbolicSeries} & $a$, $b$, $x$ where $a$ is the lower bound, $b$ the upper bound (both constants) and $x$ a variable of the series \\
+          & \code{EvaluatedSymbolicSeries\{1\}} & $a$, $b$, where $a$ and $b$ must have at most one variable \\
+          & (will also work with arrays of EvaluatedSymbolicSeries) & \\
+        \hline \\
+        \textasciitilde & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
+          & \code{EvaluatedSymbolicSeries} & \code{Number} \\
+        \hline
+    \end{tabular}
+\end{center}
+
+Once again, if it makes sense mathematically, arguments can be used in the other order.
+
+The operator \code{\textasciitilde} is used to create \code{SymbolicSeriesEquation}, i.e equations between series. That can then be used to construct \code{PDESeries} and \code{LocalizedPDESeries}
+
 \subsubsection{Constructing PDESeries and LocalizedPDESeries}
+
+The constructors for the \code{PDESeries} and \code{LocalizedPDESeries} are exactly the same. They have the following arguments:
+
+\begin{itemize}
+    \item \code{\{T\}} -- The type parameter of the coefficients' type
+    \item \code{seriesID::Symbol} -- The series' ID
+    \item \code{variables::Vector{Num}} -- The variables of the series
+    \item \code{center::Vector} -- The center of the series
+    \item \code{unknown::ScalarSeriesSymbol} or \code{unknown::Array\{<:ScalarSeriesSymbol\}} -- The \\ \code{ScalarSeriesSymbol} referring to \code{:self} series that were used in the equations
+    \item \code{equations::Vector\{<:SymbolicSeriesEquation\}} -- The partial differential equation(s) and its boundary conditions
+\end{itemize}
+
+Additionnaly, if the unknown series in your equations is integrated, you will need to provide an additionnal argument: \code{maxIntegrationOrders::Vector\{Int\}}. For each equation, indicate how many times the unknown series has been integrated at most. This will be used to deduce which equations should be solved when computing the coefficients. 
+
+The main difference between \code{PDESeries} and \code{LocalizedPDESeries} comes from the algorithmic comlexity of the coefficients' computation, and when they can be used: Some operations, such as evaluating a \code{SymbolicSeries} at the wrong points or variables, or integrating between "non-natural" bounds will make the resulting series' coefficients depend on an infinite number of coefficients. This implies that to be computed numerically, the coefficients expressions will have to be truncated up to a certain order. In this case, \code{LocalizedPDESeries} should be used. 
+
+Otherwise, \code{PDESeries} can be used. When using \code{PDESeries}, coefficients can be computed with their exact value order by order, this results in the algorithmic complexity being $O(N\times N^D)$ where $N$ is the order up to which the coefficients are computed and $D$ the number of variables. 
+
+When computing the coefficients of a \code{LocalizedPDESeries}, only approximations of the coefficients can be obtained and they all have to be computed at the same time, thus resulting in an algorithmic complexity of $O(N^{2\times D})$. Thus, whenever possible, one should use \code{PDESeries} rather than \code{LocalizedPDESeries}.
+
+Both \code{compute\_coefficients!} method offer two named arguments: \code{verbose}, an integer between 0 and 3 that is 0 by default and \code{solver} that corresponds to \code{LinearSolve}' default solver by default but can be replaced by any other solver from this module. Note that for these two \code{PowerSeries}, the type parameter \code{T} is used to convert the coefficients of the \code{LinearProblem} that has to be solved to the type \code{T}. Thus if one wants to use a GPU solver for instance, it is possible to choose \code{T=Float32} to make the computation faster (at the cost of precision).
+
+Finally, note that computing the coefficients of the \code{PDESeries} will make the \\ \code{SeriesCoefficient} stored in the unknown \code{ScalarSeriesSymbol} change so that they refer to the \code{PDESeries} instead of \code{:self}. Thus, avoid using the same unknown \code{ScalarSeriesSymbol} multiple times if you don't want that. (See \nameref{sec:sss}, \nameref{sec:sc} and \nameref{sec:PDEScompute} for more details)
+
+
+\subsubsection{An example}
+
+Here is a full example using \code{PDESeries}: 
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+
+# variables and differential operators
+@variables x y 
+Dx, Dy = Differential(x), Differential(y)
+
+# parameters
+q = 1
+N = 30
+
+E_ps = TaylorExpansionSeries{Float64}(:E, [x], [-1.2-x^3;0;;0;1.5+x^2], [0])
+compute_coefficients!(E_ps, N+1); 
+E = SymbolicSeries(E_ps)
+
+C_ps = TaylorExpansionSeries{Float64}(:C, [x], [3*cos(x);1+2*exp(x);;sin(2*x);1/(3+x^2)], [0])
+compute_coefficients!(C_ps, N)
+C = SymbolicSeries(C_ps)
+C0 = SymbolicSeries{1}[C[1,1];0;;0;C[2,2]]
+
+# unknowns
+unknowns = selfseries_symbols(2,2)
+K = SymbolicSeries(unknowns, [0,0])
+
+# PDEs and boundary conditions
+PDEs = E(x)*Dx(K(x,y)) + Dy(K(x,y))*E(y) .~ K(x,y)*(C(y)-Dy(E(y))) - C0(x)*K(x,y)
+BC1 = K(x,x)*E(x) - E(x)*K(x,x) .~ C(x) - C0(x)
+BC2 = K(x,0)*E(0)*[q, 1] .~ 0
+
+# PDESeries and computing the coefficients
+K_ps = PDESeries{Float64}(:K, [x,y], [0,0], unknowns, [BC1...; BC2...; PDEs...;])
+compute_coefficients!(K_ps, N)
+
+\end{minted}
 
 \section{Detailed documentation}
 
@@ -266,6 +425,7 @@ As mentioned before, this way of computing the coefficients causes a loss of pre
 \subsubsection{Operations defined on EvaluatedSymbolicSeries}
 
 \subsubsection{The compute\_coefficients! method}
+\label{sec:PDEScompute}
 
 \begin{thebibliography}{99}
 

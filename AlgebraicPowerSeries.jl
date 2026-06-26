@@ -727,7 +727,7 @@ end
 
 ##################################### SymbolicSeries #####################################
 """
-    SymbolicSeries{D}
+    {SymbolicSeries}{D}
 
     A representation of a series of D variables : ∑aᵢⱼₖxⁱyʲzᵏ for a 3 variables series.
     Throughout the tree of SymbolicSeries, the indices of the current node can be referred
@@ -1963,8 +1963,8 @@ end
 
     - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
                     equations::Vector{Union{Equation, SymbolicSeriesEquation}},
-                    maxIntegrationOrders::Vector{Int},
-                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol}
+                    unknown::Union{Array{ScalarSeriesSymbol}, ScalarSeriesSymbol},
+                    maxIntegrationOrders::Vector{Int}
                     ) where T` -- default constructor
 
     - `PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
@@ -2010,9 +2010,9 @@ end
 function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num}, 
                                center::Vector,
                                equations::Vector{<:SymbolicSeriesEquation},
-                               maxIntegrationOrders::Vector{<:Int},
                                unknown::Union{Array{<:ScalarSeriesSymbol}, 
-                                              ScalarSeriesSymbol}) where T
+                                              ScalarSeriesSymbol},
+                               maxIntegrationOrders::Vector{Int}) where T
 
     scalar_series_ref = map(idx -> ScalarSeriesSymbol(nothing, Tuple(idx), Dict()), unknown isa AbstractArray ? keys(unknown) : (1:1))
 

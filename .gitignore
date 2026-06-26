@@ -1,6 +1,7 @@
 examples/mathematical\ developments
 old_tests\ and\ personal\ tests/
 @v1.12.6/
+_minted/
 
 docs.aux
 docs.fdb_latexmk
