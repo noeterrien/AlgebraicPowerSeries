@@ -164,7 +164,7 @@ This user guide explains how to use the objects defined in "AlgebraicPowerSeries
     \item \code{compute\_coefficients!} -- PowerSeries is an interface to represent abstract power series. However, most uses require accessing its coefficients. To do so, these coefficients must first be computed up to a given order N by using \code{compute\_coefficients!(ps, N)} where ps is a PowerSeries.
     \item \code{ps.coefficients} -- The first way of accesing the previously computed coefficients is to access the \code{coefficients} attribute of the PowerSeries. This array is a \code{Array\{D, Vector\{T\}\}}. Since a PowerSeries represents in reality an array of scalar PowerSeries, to access the coefficients this way, one must first access the corresponding scalar series. The coefficients are then sorted in increasing order of their coefficients (i.e : $a_1 + a_2x + a_3y + a_4x^2 + a_5xy + a_6y^2 + ...$).
     For instance, one could do \code{ps.coefficients[1,2][3]} to access the coefficient of $y$ in a two variables series $x,y$ at the scalar index $(1,2)$
-    \item \code{getindex} -- The \code{getindex} method is another way of accessing a series coefficients. Calling for instance \code{ps[1,2]} will return a \code{ScalarSeriesSymbol} that can then be called using the \code{getindex} method an additionnal time which will return a \code{SeriesCoefficient}. Calling for instance \code{ps[1,2][3]} will return the corresponding \code{SeriesCoefficient}. Using then \code{getNum} on this \code{SeriesCoefficient} will return its value if it has already been computed and throw an error otherwise. Thus, \code{getNum(ps[1,2][3])} is the same as \code{ps.coefficients[1,2][3]}. 
+    \item \code{getindex} -- The \code{getindex} method is another way of accessing a series coefficients. Calling for instance \code{ps[1,2]} will return a \code{ScalarSeriesSymbol} that can then be called using the \code{getindex} method an additionnal time which will return a \code{SeriesCoefficient}. Indexing a ScalarSeriesSymbol requires using the truncated indices, i.e the series is indexed as $a_{0,0} + a_{1,0}x + a_{1,1}y + a_{2,0}x^2 + a_{2,1}xy + a_{2,2}y^2 + ...$ (see \nameref{sec:coeffidx} for details on the different ways of indexing). Calling for instance \code{ps[1,2][1,1]} will return the corresponding \code{SeriesCoefficient}. Using then \code{getNum} on this \code{SeriesCoefficient} will return its value if it has already been computed and throw an error otherwise. Thus, \code{getNum(ps[1,2][1,1])} is the same as \code{ps.coefficients[1,2][3]}. 
     See more details on \nameref{sec:sss} and \nameref{sec:sc} in the detailed documentation.
     \item \code{build\_matrix\_elt} -- Given a \code{PowerSeries ps}, it is possible to retrieve the function it represents (or rather its polynomial approximation). To do so, one can use \\ \code{build\_matrix\_elt(ps)}. This will return an \code{Array\{D\}} of functions of the \code{PowerSeries}' variables. Additionnaly, one can eventually provide a second argument N to only compute the polynomial function up to degree N. If N is greater than the order up to which the series has been computed, an error will be thrown
     \item \code{build} -- This works similarly to \code{build\_matrix\_elt} but instead of returning an array of functions, it returns a function that returns arrays. However, this seems to be less performant and the returned functions takes longer to evaluate
@@ -223,6 +223,8 @@ As mentioned before, this way of computing the coefficients causes a loss of pre
 
 \subsection{PDESeries and LocalizedPDESeries}
 
+
+
 \subsubsection{The "self" series}
 
 \subsubsection{Writing the partial differential equation}
@@ -242,6 +244,7 @@ As mentioned before, this way of computing the coefficients causes a loss of pre
 \label{sec:sc}
 
 \subsubsection{Coefficients indexing : lin, trunc, fullsym}
+\label{sec:coeffidx}
 
 \subsection{Series defined by Partial Differential Equations}
 

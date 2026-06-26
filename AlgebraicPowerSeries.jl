@@ -493,7 +493,7 @@ end
 
     The order up to which coefficients have been computed
 """
-function compute_coefficients!(ps::TranslatedSeries, N::Int; trunc_order=N)
+function compute_coefficients!(ps::TranslatedSeries{T}, N::Int; trunc_order=N) where T
 
     # first compute coefficients of the series to translate
     compute_coefficients!(ps.ref, trunc_order)
@@ -509,17 +509,14 @@ function compute_coefficients!(ps::TranslatedSeries, N::Int; trunc_order=N)
     # compute the new coefficients and fill in
     for scalar_idx in CartesianIndices(ps.size)
         for idx in indices
-            # create ranges
-            rgs = map(i -> idx[i]:trunc_order, 1:nbr_vars)
-            coeff = 0
-            for k in CartesianIndices(tuple(rgs...))
-                if +(Tuple(k)...) ≤ trunc_order # truncate
-                    binoms = *([binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
-                    ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
-                    centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
-                    coeff += binoms*ref_coeff*centers
-                end
+            # construct function to compute the coefficients
+            function term(k::Vararg{Int})::T
+                binoms = *([binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
+                ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
+                centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
+                binoms*ref_coeff*centers
             end
+            coeff = apply_with_fullsym_indices_from_and_upto(term, +, trunc_order, idx...)
             ps.coefficients[scalar_idx][convertIndices_fullsym_to_lin(idx...)] = coeff
         end
     end

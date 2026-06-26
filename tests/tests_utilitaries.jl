@@ -19,3 +19,5 @@ include("../utilitaries.jl")
 @test convertIndices_trunc_to_fullsym(2,1,1) ≈ [1,0,1]
 
 @test generate_trunc_indices(2, 3) == [[2,0,0], [2,1,0], [2,1,1], [2,2,0], [2,2,1], [2,2,2]]
+
+@test apply_with_fullsym_indices_from_and_upto(idcs::Vararg -> +(idcs...), +, 2, 0, 0, 0) == 15

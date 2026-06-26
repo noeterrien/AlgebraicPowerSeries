@@ -249,6 +249,44 @@ generate_fullsym_indices_upto(N::Int, D::Int)::Vector = [[generate_fullsym_indic
 
 
 """
+    apply_with_fullsym_indices_from_and_upto(f, aggreg, N::Int, from::Vararg{Int}, )
+
+    Applies a function to some fullsym indices between from and up to order N then 
+    aggregates them with the result of the function applied to all other possible indices
+
+    ### Input
+
+    - `f` -- The function to apply. Should take a Vararg as an argument
+    - `aggreg` -- How to aggregate (should take two arguments and return one)
+    - `N::Int` -- Up to which order should the indices be used
+    - `from::Vararg{Int}` -- What the indices should start at
+
+    ### Output
+
+    Aggregated result
+
+    ### Examples
+
+    apply_with_fullsym_indices_from_and_upto(idcs::Vararg -> +(idcs...), +, 2, 0, 0, 0) would return 15: 
+    The indices f will be called on are (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0), (1,1,0),
+    (1,0,1), (0,2,0), (0,1,1), (0,0,2) and the sums of all their components is equal to 15
+""" 
+function apply_with_fullsym_indices_from_and_upto(f, aggreg, N::Int, from::Vararg{Int}; startat=1)
+    if +(from...) > N
+        throw(ArgumentError("starting point is above maximum order"))
+    elseif +(from...) == N
+        f(from...)
+    else
+        res = f(from...)
+        for i in startat:length(from)
+            new_from = from[1:i-1]..., from[i] + 1, from[i+1:end]...
+            res = aggreg(res, apply_with_fullsym_indices_from_and_upto(f, aggreg, N, new_from...; startat=i))
+        end
+        res
+    end
+end
+
+"""
     extract_affine_transformation{T}(eqs::Vector{Equation}, vars::Vector{Num}) where T
 
     Extracts matrix A and vector b such that A.x = b ⇔ eqs where x = vars
