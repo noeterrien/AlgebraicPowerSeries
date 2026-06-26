@@ -511,7 +511,7 @@ function compute_coefficients!(ps::TranslatedSeries{T}, N::Int; trunc_order=N) w
         for idx in indices
             # construct function to compute the coefficients
             function term(k::Vararg{Int})::T
-                binoms = *([binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
+                binoms = *([binomial(Int128(k[i]), idx[i]) for i in 1:nbr_vars]...)
                 ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
                 centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
                 binoms*ref_coeff*centers
