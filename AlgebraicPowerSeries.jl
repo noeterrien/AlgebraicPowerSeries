@@ -3,7 +3,7 @@ import TaylorSeries
 import LinearSolve as LS
 include("utilitaries.jl")
 
-#-------------------------------------------------------------PowerSeries--------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------
 abstract type AbstractPowerSeries{D} end
 abstract type AbstractScalarSeriesSymbol end
 
@@ -2026,7 +2026,7 @@ function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num},
                                unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}) where T
 
     maxIntegrationOrders = zeros(Int, length(equations))
-    LocalizedPDESeries{T}(seriesID, variables, center, equations, maxIntegrationOrders, unknown)
+    LocalizedPDESeries{T}(seriesID, variables, center, equations, unknown, maxIntegrationOrders)
 end
 
 function expected_unknowns_upto(K::ScalarSeriesSymbol, D::Int, N::Int)

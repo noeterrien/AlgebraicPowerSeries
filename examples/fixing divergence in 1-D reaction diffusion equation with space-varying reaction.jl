@@ -76,7 +76,7 @@ orders1 = [5, 10, 25, 50, 75, 100]
 orders2 = [5, 10, 25, 50]
 
 # ╔═╡ 346cfbd8-bce2-4cb6-8bfb-3d4951934683
-orders3 = [40, 50, 60, 70]
+orders3 = [10, 15, 50, 60, 70]
 
 # ╔═╡ d0157777-96f4-4ff3-bdfe-c765efd12645
 md"""
@@ -176,7 +176,7 @@ end
 # ╔═╡ c7602bf2-ffbd-4b36-87d2-b124bed21d11
 # compute coefficients and resulting polynomials
 begin
-	Ks2, Ks3 = [], []
+	Ks2, Ks3 = Dict(), Dict()
 	for order in orders2 ∪ orders3
 		compute_coefficients!(K2_ps, order)
 
@@ -184,10 +184,10 @@ begin
 			K, = build_matrix_elt(K2_ps, order)
 			boundary_K(y) = K(1,y)
 			if order in orders2
-				push!(Ks2, boundary_K)
+				Ks2[order] = boundary_K
 			end
 			if order in orders3
-				push!(Ks3, boundary_K)
+				Ks3[order] = boundary_K
 			end
 		end
 	end
@@ -198,7 +198,8 @@ ax2 = Axis(fig[2,1]; title="K(1,y) with K centered at (1,0)", xlabel="y", limits
 
 # ╔═╡ 5752f576-1286-46c5-9888-ada84d660f24
 # display result
-for (order, f) in zip(orders2, Ks2)
+for order in orders2
+	f = Ks2[order]
 	lines!(ax2, y_range, f.(y_range); label="N = $order")
 end
 
@@ -210,7 +211,8 @@ ax3 = Axis(fig[3,1]; title="K(1,y) with K centered at (1,0)", xlabel="y", limits
 
 # ╔═╡ cfdb8055-001c-40b8-8b9a-570d90dde7c1
 # display result
-for (order, f) in zip(orders3, Ks3)
+for order in orders3
+	f = Ks3[order]
 	lines!(ax3, y_range, f.(y_range); label="N = $order")
 end
 
@@ -237,7 +239,7 @@ tr_K_ps = TranslatedSeries(:K1_tr, K1_ps, [1,0])
 # ╔═╡ fe19f8ab-4724-4ab3-9df5-5774e1068bc1
 # compute coefficients and resulting polynomials
 begin
-	Ks4, Ks5, Ks6 = [], [], []
+	Ks4 = []
 	for order in orders2
 		
 		compute_coefficients!(tr_K_ps, order)
@@ -245,16 +247,28 @@ begin
 		boundary_K4(y) = K4(1,y)				
 		push!(Ks4, boundary_K4)
 
+	end
+end
+
+# ╔═╡ 6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
+begin
+	Ks5 = []
+	for order in orders2
 		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order1)
 		K5, = build_matrix_elt(tr_K_ps, order)
 		boundary_K5(y) = K5(1,y)				
 		push!(Ks5, boundary_K5)
+	end
+end
 
+# ╔═╡ a5e57c56-2120-486e-a7ea-070d0eeb4d60
+begin
+	Ks6 = []
+	for order in orders2
 		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order2)
 		K6, = build_matrix_elt(tr_K_ps, order)
 		boundary_K6(y) = K6(1,y)				
 		push!(Ks6, boundary_K6)
-		
 	end
 end
 
@@ -303,10 +317,7 @@ md"""
 display(fig)
 
 # ╔═╡ 7da23a18-7df6-4060-8070-923a752b7f84
-# ╠═╡ disabled = true
-#=╠═╡
 save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0).png", fig; px_per_unit=4)
-  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
@@ -357,6 +368,8 @@ save("comparison between centered at (0,0), centered at (1,0) and translated fro
 # ╠═03e569b5-dfb3-4fcc-979d-b97e8218cb09
 # ╠═2f2ee767-ff71-4188-a388-8aacd60b35a9
 # ╠═fe19f8ab-4724-4ab3-9df5-5774e1068bc1
+# ╠═6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
+# ╠═a5e57c56-2120-486e-a7ea-070d0eeb4d60
 # ╠═3dded5a7-344c-49ed-a2db-65822d2e3063
 # ╠═8710aa04-7e07-4d7a-8685-5e57edf2139e
 # ╠═4167bd16-e512-4b7b-b86b-e36a6dce5e4b

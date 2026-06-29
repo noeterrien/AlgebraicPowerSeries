@@ -392,26 +392,158 @@ compute_coefficients!(K_ps, N)
 
 \section{Detailed documentation}
 
+The objective of this part of the documentation is to explain the idea and mathematical basis behind this program. One can find more informations on every function and type defined in this project in the documentation of the code itself
+
 \subsection{PowerSeries}
 
 \subsubsection{PowerSeries attributes}
 
+\code{PowerSeries\{T,D\}} is the main object of this module. Its interface requires several attributes to be defined, as well as the \code{compute\_coefficients!} method:
+
+\begin{itemize}
+    \item \code{T} -- The type the coefficients will be stored as
+    \item \code{D} -- The number of dimensions of the series (similar to \code{Array}). \code{D} must be greater or equal to 1
+    \item \code{seriesID} -- A unique ID used to identify the series
+    \item \code{size::NTuple{D, Int}} -- The dimensions of the series (similar to \code{Array})
+    \item \code{variables::Vector{Num}} -- The variables of the series (can be obtained using \code{@variables})
+    \item \code{center::Vector} -- The center of the series, Must be the same length as \code{variables}
+    \item \code{coefficients::Array\{Vector\{T\},D\}} -- The series' already computed coefficients. The index of the array corresponds to a scalar series and the coefficients are then stored inside a vector, using linear indexing (see \nameref{sec:coeffidx} for details)
+    \item \code{order::Int} -- The order up to which the coefficients have already been computed. Usually, when none has been computed yet, the order is defined as -1
+    \item \code{scalar\_series\_ref::Array{AbstractScalarSeriesSymbol, D}} -- For each scalar series, a \code{ScalarSeriesSymbol} representing it (see \nameref{sec:sss} for details)
+    \item \code{compute\_coefficients!(ps::PowerSeries, N::Int)} -- A method to compute the coefficients of the series up to order N, store them in the \code{coefficients} array and update the \code{order}
+\end{itemize}
+
+Additionnaly, \code{AbstractPowerSeries\{D\}} is an abstract type representing a \code{PowerSeries\{T,D\}} for any type \code{T}.
+
+The \code{Base.show} method is implemented for \code{PowerSeries}
+
 \subsubsection{ScalarSeriesSymbol}
 \label{sec:sss}
+
+Some \code{PowerSeries} may require access to a number of informations on a series' coefficient, such as a \code{Num} representing it, its value if it has already been computed, its order...
+
+These informations are stored inside a \code{SeriesCoefficient} (see \nameref{sec:sc}) and these \code{SeriesCoefficient} are stored inside \code{ScalarSeriesSymbol}. For this purpose, \\ \code{ScalarSeriesSymbol} implement the \code{getindex} method: Using the truncated indexing (see \nameref{sec:coeffidx}), one can use this method to create a \code{SeriesCoefficient} representing the scalar series coefficient if it has not yet been created and then access it. If the \code{SeriesCoefficient} has already been created, then the \code{getindex} method simply allows to access it.
+
+One can access the \code{ScalarSeriesSymbol} of a \code{PowerSeries} using the \code{getindex} method on the \code{PowerSeries}. The \code{ScalarSeriesSymbol} attributes are the following:
+
+\begin{itemize}
+    \item \code{ps::Union{Nothing, PowerSeries, Symbol}} -- a reference to the \code{PowerSeries} it represents. Additionnaly, it can be set to \code{nothing} when the series has not yet been initialized or \code{:self} to reference the self series.
+    \item \code{scalar\_idx::Tuple} -- The scalar index of the \code{ScalarSeriesSymbol} inside the ps. Doing ps[scalar\_idx...] returns the \code{ScalarSeriesSymbol} itself
+    \item \code{coefficients::Dict{Vector, SeriesCoefficient}} -- A dictionary where the \\ \code{SeriesCoefficient} are stored. Its keys are vectors of indices (using the truncated convention)
+\end{itemize}
+
+Additionnaly, the function \code{selfseries\_symbols(size::Vararg{Int})} can be used to generate an array of \code{ScalarSeriesSymbol} that refer to series \code{:self} (or a \code{ScalarSeriesSymbol} if \code{size} is empty)
+
+The \code{Base.show} method is implented for \code{ScalarSeriesSymbol}
+
+\code{AbstractScalarSeriesSymbol} is defined to allow the definition of \code{PowerSeries}' \code{scalar\_series\_ref} attribute.
+
 
 \subsubsection{SeriesCoefficient}
 \label{sec:sc}
 
+The \code{SeriesCoefficient\{D\}} represents a power series' coefficient that may or may not have been computed yet. Its attributes are the following:
+
+\begin{itemize}
+    \item \code{D} -- The number of dimensions of the \code{PowerSeries} it relates to
+    \item \code{ps::Union{AbstractPowerSeries{D}, Symbol}} -- The \code{PowerSeries} it relates to
+    \item \code{sym::Num} -- A symbol representing the coefficient. Probably disgarded, should not be used
+    \item \code{unique\_sym::Num} -- A unique Symbolics' representation of the coefficient, automatically created when using the \code{SeriesCoefficient} constructor 
+    \item \code{indices::Vector{Int}} -- The indices of the coefficient in the scalar series (using the truncated convention)
+    \item \code{index::NTuple{Int, D}} -- The index of the scalar series inside the \code{PowerSeries}
+\end{itemize}
+
+Using \code{sc.ps[sc.index...][sc.indices...]} where \code{sc} is a \code{SeriesCoefficient} will return \code{sc}
+
+The \code{getindex} method of \code{ScalarSeriesSymbol} should be preferred as a way to create a \code{SeriesCoefficient}. However, it is possible to create one using the default constructor: 
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol}, 
+                  sym::Num, 
+                  indices::Vector{Int}, 
+                  index::NTuple{D, Int})
+\end{minted}
+
+\code{getOrder(sc::SeriesCoefficient)} returns the order of the \code{SeriesCoefficient}
+
+The \code{Base.show} method is implemented for \code{SeriesCoefficient}
+
 \subsubsection{Coefficients indexing : lin, trunc, fullsym}
 \label{sec:coeffidx}
 
+When working with power series, several conventions are possible to index the coefficients. In this program, three different ones are used, depending on the context:
+
+\begin{itemize}
+    \item linear (lin) -- The series is represented as 
+    $$K(x,y,z) = a_1 + a_2x + a_3y + a_4z + a_5x^2 + a_6xy + a_7xz + a_8y^2 + a_9yz + a_{10}z^2 + \dots$$
+    Here, the indices are $1, 2, 3, 4, \dots$. This is convention used when the coefficients have to be stored in a single vector, such as for the \code{coefficients} attribute of \code{PowerSeries}
+    \item truncated (trunc) -- The series is represented as 
+    \begin{align*}
+        K(x,y,z) &= a_{0,0,0} + a_{1,0,0}x + a_{1,1,0}y + a_{1,1,1}z + a_{2,0,0}x^2 + a_{2,1,0}xy \\ &+ a_{2,1,1}xz + a_{2,2,0}y^2 + a_{2,2,1}yz + a_{2,2,2}z^2 + \dots \\ 
+        &= \sum_{i=0}^{+\infty}\sum_{j=0}^{i}\sum_{k=0}^{j}a_{i,j,k}x^{i-j}y^{j-k}z^k
+    \end{align*}
+    This convention allows to easily access the order of the coefficient, as it is always the first index. Thus it allows for easy truncation of a series up to a given order. This is the convention usually used to access a \code{PowerSeries}' \code{SeriesCoefficient}
+    \item fully symetric (fullsym) -- The series is represented as 
+    \begin{align*}
+        K(x,y,z) &= a_{0,0,0} + a_{1,0,0}x + a_{0,1,0}y + a_{0,0,1}z + a_{2,0,0}x^2 + a_{1,1,0}xy \\ &+ a_{1,0,1}xz + a_{0,2,0}y^2 + a_{0,1,1}yz + a_{0,0,2}z^2 + \dots \\
+        &= \sum_{i=0}^{+\infty}\sum_{j=0}^{+\infty}\sum_{k=0}^{+\infty}a_{i,j,k}x^i y^j z^k
+    \end{align*}
+    This is the most natural convention, and it is indeed the most practical when performing operations on power series. Thus, it is the convention chosen for \code{SymbolicSeries} indexing.
+\end{itemize}
+
+Several functions, defined in the "utilitaries.jl" file allow to translate indices from one convetion to another. They all take a \code{Vararg} as an argument and return either a \code{Vector} when the result is truncated or fully symetric and an \code{Int} when the result is linear. These functions are the following:
+
+\begin{itemize}
+    \item \code{convertIndices\_trunc\_to\_lin}
+    \item \code{convertIndices\_fullsym\_to\_lin}
+    \item \code{convertIndices\_fullsym\_to\_trunc}
+    \item \code{convertIndices\_trunc\_to\_fullsym}
+\end{itemize}
+
 \subsection{Series defined by Partial Differential Equations}
+
+Since power series can possibly have an infinite number of terms, it is not possible to easily represent operations on them numerically. To do so, a first approach is to truncate the series. This is what is done in the TaylorSeries module ~\cite{taylorseriesmodule}. However, since \code{PowerSeries} are supposed to represent power series algebraically, this is not the approach that what chosen here (even though the TaylorSeries module is used to compute \code{TaylorExpansionSeries}' coefficients).
+
+Instead, operations on power series are represented as a tree of operations. The nodes of this tree are \code{SymbolicSeries} or \code{EvaluatedSymbolicSeries} and its leaves are \code{ScalarSeriesSymbol}. This way, the truncation can be applied only when computing the coefficients.
 
 \subsubsection{SymbolicSeries, EvaluatedSymbolicSeries and SymbolicSeriesEquation}
 
+\code{SymbolicSeries\{D\}} are the leaves of the tree of operations on power series. Its attributes are the following:
+
+\begin{itemize}
+    \item \code{D} -- The number of variables of the \code{SymbolicSeries}
+    \item \code{ref::Union\{ScalarSeriesSymbol, 
+                            NlinearSeriesOperation,
+                            MultilinearSeriesOperation\}} -- 
+    Either a \code{ScalarSeriesSymbol} if the \code{SymbolicSeries} is a leaf, or an operations on other \code{SymbolicSeries} (see \nameref{sec:nlinop} and \nameref{sec:mlinop} for details)
+    \item \code{center::Vector} -- The center of the series
+    \item \code{get\_selfseries\_coefficients} -- A function that, given a \code{Vararg\{Int, D\}}, returns the set of \code{SeriesCoefficient} referring to \code{:self} that appear in the operation. This is used by the \code{compute\_coefficients!} method. This function has a named optionnal argument \code{N} which is the truncation order to be passed if an operation implies an infinite number of coefficients
+\end{itemize}
+
+Since some operations require the series involved to be evaluated in some variables, the \\ \code{EvaluatedSymbolicSeries\{D\}} can do just that. Its attributes are:
+
+\begin{itemize}
+    \item \code{D} -- The number of variables of the series
+    \item \code{series::SymbolicSeries\{D\}} -- The series to evaluate
+    \item \code{variables::Vector\{Num\}} -- The variables in which the series is being evaluated. Has length D.
+\end{itemize}
+
+Finally, \code{SymbolicSeriesEquation{D}} represents an equation between two \code{SymbolicSeries}. It has two attributes:
+
+\begin{itemize}
+    \item \code{LHS::Union{SymbolicSeries{D}, Number}} -- The left hand side
+    \item \code{RHS::Union{SymbolicSeries{D}, Number}} -- The right hand side
+\end{itemize}
+
+The \code{Base.show} method is implemented for \code{SymbolicSeries}, \code{EvaluatedSymbolicSeries} and \code{SymbolicSeriesEquation}, even though it may not give any particular insights to display those.
+
 \subsubsection{NlinearSeriesOperation}
+\label{sec:nlinop}
+
+
 
 \subsubsection{MultilinearSeriesOperation}
+\label{sec:mlinop}
 
 \subsubsection{getindex method on SymbolicSeries}
 
@@ -442,7 +574,8 @@ J.-M.~Coron, R.~Vazquez, M.~Krstic, and G.~Bastin, ``Local exponential $H^2$ sta
 \bibitem{severalcomplexvariables}
 Jiří Lebl, ``Tasty Bits of Several Complex Variables, a whirlwind tour of the subject''
 
-
+\bibitem{taylorseriesmodule}
+Luis Benet, David P. Sanders, "A Julia package for Taylor polynomial expansions in one or more independent variables.", \url{https://github.com/JuliaDiff/TaylorSeries.jl}
 
 \end{thebibliography}
 
