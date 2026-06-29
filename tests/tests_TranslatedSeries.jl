@@ -25,3 +25,6 @@ tol = 1e-8
 @test all(.≈(cosin_trs_1.coefficients[1,2], cosin_tes_1.coefficients[1,2], atol=tol))
 @test all(.≈(cosin_trs_1.coefficients[2,1], cosin_tes_1.coefficients[2,1], atol=tol))
 @test all(.≈(cosin_trs_1.coefficients[2,2], cosin_tes_1.coefficients[2,2], atol=tol))
+
+
+@profview compute_coefficients!(cosin_trs_1, 10; trunc_order=30)

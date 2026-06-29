@@ -109,7 +109,37 @@ convertIndices_fullsym_to_trunc(I::Vararg{Int64}) = [+(I[i:end]...) for i in eac
 
 convertIndices_trunc_to_fullsym(I::Vararg{Int64}) = begin J = [I..., 0] ; [J[i]-J[i+1] for i in eachindex(I)] end
 
-convertIndices_fullsym_to_lin(I::Vararg{Int64}) = convertIndices_trunc_to_lin(convertIndices_fullsym_to_trunc(I...)...)
+fullsym_to_lin_dicos = Dict[]
+push!(fullsym_to_lin_dicos, Dict{Int, Int}())
+len_fullsym_to_lin_dicos = 1
+function convertIndices_fullsym_to_lin(I::Vararg{Int64, D}) where D 
+
+    for N in len_fullsym_to_lin_dicos+1:D  
+        push!(fullsym_to_lin_dicos, Dict{NTuple{N, Int64}, Int64}())
+        global len_fullsym_to_lin_dicos += 1
+    end
+
+    function aux(I::Vararg{Int64, D2}) where D2
+        if D2 > 0 && I in keys(fullsym_to_lin_dicos[D2])
+            return fullsym_to_lin_dicos[D2][I...]
+        else
+            order = D2==0 ? 0 : +(I...)
+            if order == 0
+                return 0
+            else
+                first_index_for_order = find_first_coeff_of_order(order, D2)
+                fullsym_to_lin_dicos[D2][I...] = first_index_for_order + aux(I[2:end]...)
+                return fullsym_to_lin_dicos[D2][I...]
+            end
+        end
+    end
+    find_first_coeff_of_order(order::Int, D3) = 1 + aux([0 for _ in 1:D3-1]..., order-1)
+
+    1 + aux(I...)
+
+end
+
+
 
 """
     decode_coeffIndex(u_sym::Num)::Tuple{Vector{Int}, Int}
@@ -312,4 +342,27 @@ function extract_affine_transformation(eqs::Vector{Equation}, vars::Vector{Num},
     b = T.(Symbolics.value.(b_sym))
 
     A, b
+end
+
+dyn_binoms = Dict{Tuple{Int, Int}, Int128}()
+"""
+    dynamic_binomial(n::Int, k::Int)::Int128
+
+    Returns the binomial coefficient nCk and saves it to dyn_binoms for further
+    computations
+"""
+function dynamic_binomial(n::Int, k::Int)::Int128
+    if k > n
+        throw(ArgumentError("$k > $n. Cannot compute binomial coefficient"))
+    elseif k > n÷2
+        return dynamic_binomial(n, n-k)
+    elseif (n,k) in keys(dyn_binoms)
+        return dyn_binoms[n,k]
+    elseif k == 0
+        dyn_binoms[n,k] = 1
+        return 1
+    else
+        dyn_binoms[n,k] = dynamic_binomial(n-1, k-1) + dynamic_binomial(n-1, k)
+        return dyn_binoms[n,k]
+    end
 end

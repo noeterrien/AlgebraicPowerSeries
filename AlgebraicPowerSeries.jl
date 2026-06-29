@@ -509,15 +509,27 @@ function compute_coefficients!(ps::TranslatedSeries{T}, N::Int; trunc_order=N) w
     # compute the new coefficients and fill in
     for scalar_idx in CartesianIndices(ps.size)
         for idx in indices
-            # construct function to compute the coefficients
-            function term(k::Vararg{Int})::T
-                binoms = *([binomial(Int128(k[i]), idx[i]) for i in 1:nbr_vars]...)
-                ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
-                centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
-                binoms*ref_coeff*centers
+            if trunc_order > 66 # binomial will overflow Int64
+                # construct function to compute the coefficients
+                function term1(k::Vararg{Int})::T
+                    binoms = *([dynamic_binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
+                    ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
+                    centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
+                    binoms*ref_coeff*centers
+                end
+                coeff = apply_with_fullsym_indices_from_and_upto(term1, +, trunc_order, idx...)
+                ps.coefficients[scalar_idx][convertIndices_fullsym_to_lin(idx...)] = coeff
+            else
+                # construct function to compute the coefficients
+                function term2(k::Vararg{Int})::T
+                    binoms = *([binomial(k[i], idx[i]) for i in 1:nbr_vars]...)
+                    ref_coeff = ps.ref.coefficients[scalar_idx][convertIndices_fullsym_to_lin(Tuple(k)...)]
+                    centers = *([(ps.center[i] - ps.ref.center[i])^(k[i]-idx[i]) for i in 1:nbr_vars]...)
+                    binoms*ref_coeff*centers
+                end
+                coeff = apply_with_fullsym_indices_from_and_upto(term2, +, trunc_order, idx...)
+                ps.coefficients[scalar_idx][convertIndices_fullsym_to_lin(idx...)] = coeff
             end
-            coeff = apply_with_fullsym_indices_from_and_upto(term, +, trunc_order, idx...)
-            ps.coefficients[scalar_idx][convertIndices_fullsym_to_lin(idx...)] = coeff
         end
     end
 
@@ -1169,7 +1181,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
 
                     arg2(idx::Int; params) = NlinearSeriesOperation(v -> +(v...), 
                                                [NlinearSeriesOperation(v -> v[1]*v[2]*v[3],
-                                                [binomial(Int128(idx), m),
+                                                [dynamic_binomial(idx, m),
                                                  s[
                                                     params[1:other_x-1]...,
                                                     params[other_x]-m,
