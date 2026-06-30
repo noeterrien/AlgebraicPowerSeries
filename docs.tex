@@ -216,12 +216,14 @@ This object stores a referenced \code{PowerSeries} ref and a new center to be ab
 
 For the \code{compute\_coefficients!} method to work in a mathematically correct way, there must exist a continuous path between both centers, inside the domain of holomorphy of the function represented by the \code{ref} series. The formula that is used can be deduced from Cauchy's integral formula (see ~\cite{severalcomplexvariables}) which gives : 
 
-\prop{If $f$ is holomorphic on some connected open set $\Omega \subset \mathbb{C}^m$, $c, c^* \in \Omega$ and 
+\prop{If $f$ is holomorphic on some connected open set $\Omega \subset \mathbb{C}^m$, $c, c^* \in \Omega$ \textit{(these hypothesises are only intuitions and are yet to be proven)} and 
 $$f(z_1, \dots, z_m) = \sum_{\alpha_1=0}^{+\infty} \sum_{\alpha_2=0}^{+\infty} \dots \sum_{\alpha_m=0}^{+\infty} a_{\alpha_1, \alpha_2, \dots, \alpha_m} (z_1-c_1)^{\alpha_1}(z_2-c_2)^{\alpha_2} \dots (z_m-c_m)^{\alpha_m}$$
 on some polydisk centered at $c=(c_1, ... c_m)$ and included in $\Omega$. Then there exists a non-empty polydisk $\mathcal{D} \subset \Omega$ centered at $c^*=(c^*_1, \dots, c^*_2)$ such that
 $$\forall z \in \mathcal{D}, f(z_1, \dots, z_m) = \sum_{\alpha_1=0}^{+\infty} \sum_{\alpha_2=0}^{+\infty} \dots \sum_{\alpha_m=0}^{+\infty} a^*_{\alpha_1, \alpha_2, \dots, \alpha_m} (z_1-c^*_1)^{\alpha_1}(z_2-c^*_2)^{\alpha_2} \dots (z_m-c^*_m)^{\alpha_m}$$
 And for any of these polydisks, we have $\forall (\alpha_1, \alpha_2, \dots, \alpha_m) \in \N^m$, 
 $$a^*_{\alpha_1, ..., \alpha_m} = \sum_{k_1=\alpha_1}^{+\infty} \sum_{k_2=\alpha_2}^{+\infty} \dots \sum_{k_m=\alpha_m}^{+\infty} \binom{k_1}{\alpha_1} \dots \binom{k_m}{\alpha_m} a_{k_1, \dots, k_m} (c^*_1-c_1)^{k_1-\alpha_1} \dots (c^*_m-c_m)^{k_m-\alpha_m}$$
+
+\textit{(The formula is however at least true when $c*$ is inside a polydisk centered at $c$ that is included in $\Omega$)}
 }
 
 As mentioned before, this way of computing the coefficients causes a loss of precision, as the coefficients expressions must be truncated. Furthermore, in the above formula, coefficients of a given order are computed using only coefficients of the orders above. Consequently, the loss of precision is more important on coefficients of higher orders. To compute these coefficients up to a given order N, the referenced \code{PowerSeries} coefficients are first computed up to order N, and then every coefficient's expression is truncated to use only these coefficients. If needed, it is however possible to give an additionnal named argument \code{trunc\_order} to the \code{compute\_coefficients!} method of \code{TranslatedSeries} to compute the coefficients of the referenced series up to this \code{trunc\_order} and then use these additionnal coefficients to compute the \code{TranslatedSeries}' coefficients up to order N.
@@ -266,12 +268,14 @@ To write equations, several operations are implemented between \code{SymbolicSer
           & \code{SymbolicSeries}      & -------------------------- \\
         \hline
         * & \code{SymbolicSeries} & \code{Number} \\
-          & \code{SymbolicSeries\{1\}} & \code{SymbolicSeries\{1\}} \\
+        \textit{(both series must have the same centers)}  & \code{SymbolicSeries\{1\}} & \code{SymbolicSeries\{1\}} \\
         \hline
         / & \code{SymbolicSeries} & \code{Number} \\
         \hline
     \end{tabular}
 \end{center}
+
+Details on the implementation can be found in the \nameref{sec:app}
 
 All operations +, -, * involving a \code{SymbolicSeries} and a constant (either \code{Number} or \\ \code{SymbolicSeries\{0\}}) can be used the other way around.
 
@@ -298,7 +302,7 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
           & \code{EvaluatedSymbolicSeries}      & -------------------------- \\
         \hline
         * & \code{EvaluatedSymbolicSeries} & \code{Number} \\
-          & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
+        \textit{(center components must be the same between the two series)}  & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
         \hline
         / & \code{EvaluatedSymbolicSeries} & \code{Number} \\
         \hline
@@ -321,6 +325,8 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
         \hline
     \end{tabular}
 \end{center}
+
+Details on the implementation can be found in the \nameref{sec:app}
 
 Once again, if it makes sense mathematically, arguments can be used in the other order.
 
@@ -743,17 +749,134 @@ With the previous \code{getNum} method, it is possible to get equations between 
 In the case of \code{PDESeries}, the indices corresponding to the equations used to compute the coefficients of previous orders are also discarded. 
 
 \section{Appendix}
+\label{sec:app}
 
 In this appendix one will find the mathematical development behind every operation on \code{SymbolicSeries} and \code{EvaluatedSymbolicSeries}
 
 \subsection{Evaluating a SymbolicSeries}
 
+Let $K(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty}\dots\sum_{i_D=0}^{+\infty}K_{i_1, \dots, i_D}(x_1-c_1)^{i_1} \dots (x_D-c_D)^{i_D}$, and let's say that one wants to evaluate $K$ in some variables or constants $y_1, ..., y_D$. Let's compute the expressions of the resulting series' coefficients. 
 
+For that, let's first rewrite 
+$$K(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty}\dots \sum_{i_{D-1}=0}^{+\infty} (x_1-c_1)^{i_1} \dots (x_{D-1}-c_{D-1})^{i_{D-1}}\sum_{i_D=0}^{+\infty}K_{i_1, \dots i_D} (x_D-c_D)^{i_D}$$
+
+Then we have several possibilities:
+
+\subsubsection{$y_D=c_D$}
+
+In that case, the result is a series of $D-1$ variables, evaluated in $y_1, \dots, y_{D-1}$ for which the coefficients are $K_{i_1, \dots, i_{D-1}, 0}$:
+
+$$K(y_1, \dots, y_D) = \sum_{i_1=0}^{+\infty}\dots \sum_{i_{D-1}=0}^{+\infty} K_{i_1, \dots, i_{D-1}, 0} (y_1-c_1)^{i_1} \dots (y_{D-1}-c_{D-1})^{i_{D-1}}$$
+
+One can then proceed to evaluate $y_{D-1}$
+
+\subsubsection{$y_D \neq c_D$ is a constant}
+
+In that case, the result is a series of $D-1$ variables, evaluated in $y_1, \dots, y_{D-1}$ for which the coefficients are $\sum_{i_D=0}^{+\infty} K_{i_1, \dots, i_{D-1}, i_D}(y_D-c_D)^{i_D}$ (The use of \code{LocalizedPDESeries} is required):
+
+$$K(y_1, \dots, y_D) = \sum_{i_1=0}^{+\infty}\dots \sum_{i_{D-1}=0}^{+\infty} \left(\sum_{i_D=0}^{+\infty}K_{i_1, \dots, i_{D-1}, i_D} (y_D-c_D)^{i_D}\right) (y_1-c_1)^{i_1} \dots (y_{D-1}-c_{D-1})^{i_{D-1}}$$
+
+One can then proceed to evaluate $y_{D-1}$
+
+\subsubsection{$y_D$ is a variable and $y_D \notin \left\{y_1, \dots, y_{D-1}\right\}$}
+
+In that case one can rearrange the sum and proceed to evaluate $y_{D-1}$
+
+\subsubsection{$y_D$ is a variable and $\exists k \in \left\{1, \dots, D-1\right\}, y_k = y_D$}
+
+For the sake of simplicity, let's assume that $k = D-1$. one then has
+
+$$K(y_1, \dots, y_D) = \sum_{i_1=0}^{+\infty}\dots \sum_{i_{D-1}=0}^{+\infty} (y_1-c_1)^{i_1} \dots (y_{D-1}-c_{D-1})^{i_{D-1}}\sum_{i_D=0}^{+\infty}K_{i_1, \dots i_D} (y_{D-1}-c_D)^{i_D}$$
+
+$(y_{D-1}-c_D)^{i_D}$ can then be rewritten as
+
+$$(y_{D-1}-c_D)^{i_D} = (y_{D-1}-c_{D-1} + c_{D-1}-c_D)^{i_D} = \sum_{k=0}^{i_D} \binom{i_D}{k} (y_{D-1}-c_{D-1})^k(c_{D-1}-c_D)^{i_D-k}$$
+
+Thus 
+
+\begin{align*}
+    \sum_{i_{D-1}=0}^{+\infty}\sum_{i_D=0}^{+\infty} &K_{i_1, \dots i_D} (y_{D-1}-c_{D-1})^{i_{D-1}}(y_{D-1}-c_D)^{i_D} \\ 
+    &= \sum_{i_D=0}^{+\infty}\sum_{k=0}^{i_D}\sum_{i_{D-1}=0}^{+\infty}\binom{i_D}{k}K_{i_1, \dots i_D}(y_{D-1}-c_{D-1})^{k+i_{D-1}}(c_{D-1}-c_D)^{i_D-k} \\
+    &= \sum_{i_D=0}^{+\infty}\sum_{k=0}^{i_D}\sum_{i_{D-1}=k}^{+\infty}\binom{i_D}{k}K_{i_1, \dots i_D}(y_{D-1}-c_{D-1})^{i_{D-1}}(c_{D-1}-c_D)^{i_D-k} \\
+    &= \sum_{i_D=0}^{+\infty}\sum_{i_{D-1}=0}^{+\infty}\sum_{k=0}^{min(i_{D-1},i_D)}\binom{i_D}{k}K_{i_1, \dots i_D}(y_{D-1}-c_{D-1})^{i_{D-1}}(c_{D-1}-c_D)^{i_D-k} \\
+    &= \sum_{i_{D-1}=0}^{+\infty}\left(\sum_{i_D=0}^{+\infty}\sum_{k=0}^{min(i_{D-1},i_D)}\binom{i_D}{k}K_{i_1, \dots i_D}(c_{D-1}-c_D)^{i_D-k}\right)(y_{D-1}-c_{D-1})^{i_{D-1}}
+\end{align*}
+
+Once again, the use of \code{LocalizedPDESeries} is required. One then proceeds to evaluate $y_{D-1}$
 
 \subsection{Operations defined on SymbolicSeries}
 
+The operations +, -, / and multiplication by a scalar for \code{SymbolicSeries} are straight forward. We present how the multiplication of two \code{SymbolicSeries{1}} is handled:
+
+Let $f(x) = \sum_{i=0}^{+\infty}f_i x^i$ and $g(x) = \sum_{i=0}^{+\infty}g_i x^i$ (since both series are supposed to have the center, for the sake of simplicity, let's assume this center is $0$)
+
+Then 
+\begin{align*}
+    f(x)g(x) &= \left(\sum_{i=0}^{+\infty}f_i x^i\right)\left(\sum_{i=0}^{+\infty}g_i x^i\right) \\ 
+    &= \sum_{i=0}^{+\infty}\left(\sum_{j=0}^{i}f_j g_{i-j}\right) x^i
+\end{align*}
+
+Thus the resulting series' coefficients are $\sum_{j=0}^{i}f_j g_{i-j}, i \in \N$.
+
 \subsection{Operations defined on EvaluatedSymbolicSeries}
 
+Operators +, -, /, \textasciitilde and multiplication by a scalar are straight forward for \code{EvaluatedSymbolicSeries}. Here is the explanation of how multiplication of two series, differentiation and integration are handled.
+
+\subsubsection{Multiplication of two EvaluatedSymbolicSeries}
+
+Let $F(x_1, \dots, x_M) = \sum_{i_1=0}^{+\infty}\dots\sum_{i_M=0}^{+\infty}F_{i_1, \dots, i_M}(x_1-c_1)^{i_1} \dots (x_M-c_M)^{i_M}$ and \\
+$G(y_1, \dots, y_N) = \sum_{j_1=0}^{+\infty}\dots\sum_{j_N=0}^{+\infty}G_{j_1, \dots, j_N}(y_1-c'_1)^{j_1} \dots (y_N-c'_N)^{j_N}$
+
+Let's denote $\left\{z_1, \dots, z_D\right\} = \left\{x_1, \dots, x_M\right\} \cap \left\{y_1, \dots, y_N\right\}$ and assume that \\
+$\left\{x_{D+1}, \dots, x_M\right\} = \left\{x_1, \dots, x_M\right\} \setminus \left\{y_1, \dots, y_N\right\}$ and that \\
+$\left\{y_{D+1}, \dots y_N\right\} = \left\{y_1, \dots, y_N\right\} \setminus \left\{x_1, \dots, x_M\right\}$ (once again, for the sake of simplicity)
+
+Then this implies that $\forall i \in \left\{1, D\right\}, c_i = c'_i$. Thus, 
+
+\begin{align*}
+    &F(x_1, \dots, x_M)G(y_1, \dots, y_N) = \\
+    &\sum_{i_{D+1}=0}^{+\infty}\dots \sum_{i_M=0}^{+\infty} \sum_{j_{D+1}=0}^{+\infty} \dots \sum_{j_N=0}^{+\infty} \left(A\right) (x_{D+1}-c_{D+1})^{i_{D+1}} \dots (x_M-c_M)^{i_M} (y_{D+1}-c'_{D+1})^{j_{D+1}} \dots (y_N-c'_N)^{j_N}
+\end{align*}
+
+where 
+\begin{align*}
+    A &= \left(\sum_{i_1=0}^{+\infty} \dots \sum_{i_D=0}^{+\infty} F_{i_1, \dots i_M} (z_1-c_1)^{i_1} \dots (z_D-c_D)^{i_D}\right)\left(\sum_{j_1=0}^{+\infty} \dots \sum_{j_D=0}^{+\infty} G_{j_1, \dots j_N} (z_1-c_1)^{j_1} \dots (z_D-c_D)^{j_D}\right) \\
+    &= \sum_{i_1=0}^{+\infty} \dots \sum_{i_{D-1}=0}^{+\infty} (z_1-c_1)^{i_1} \dots (z_{D-1} - c_{D-1})^{i_{D-1}} \left(\sum_{i_D=0}^{+\infty}F_{i_1, \dots, i_M}(z_D-c_D)^{i_D}\right) \times \\
+    &\left(\sum_{j_D=0}^{+\infty}\left(\sum_{j_1=0}^{+\infty}\dots\sum_{j_{D-1}=0}^{+\infty}G_{j_1, \dots, j_N}(z_1-c_1)^{j_1}\dots (z_{D-1}-c_{D-1})^{j_{D-1}}\right)(z_D-c_D)^{j_D}\right) \\
+    &= \sum_{i_1=0}^{+\infty} \dots \sum_{i_{D-1}=0}^{+\infty} (z_1-c_1)^{i_1} \dots (z_{D-1} - c_{D-1})^{i_{D-1}} \times \\
+    &\sum_{i_D=0}^{+\infty} \left(\sum_{j_D=0}^{i_D}F_{i_1, \dots, j_D, \dots, i_M} \left(\sum_{j_1=0}^{+\infty}\dots\sum_{j_{D-1}=0}^{+\infty}G_{j_1, \dots, i_D-j_D, \dots, j_N}(z_1-c_1)^{j_1}\dots (z_{D-1}-c_{D-1})^{j_{D-1}}\right)\right)(z_D-c_D)^{i_D} \\
+    &= \sum_{i_D=0}^{+\infty}(z_D-c_D)^{i_D}\sum_{j_D=0}^{i_D}\left(\sum_{i_1=0}^{+\infty}\dots\sum_{i_{D-1}=0}^{+\infty}F_{i_1, \dots, j_D, \dots, i_M}(z_1-c_1)^{i_1}\dots(z_{D-1}-c_{D-1})^{i_{D-1}}\right) \times \\
+    &\left(\sum_{j_1=0}^{+\infty}\dots \sum_{j_{D-1}=0}^{+\infty}G_{j_1, \dots, i_D-j_D, \dots, j_N}(z_1-c_1)^{j-1}\dots(z_{D-1}-c_{D-1})^{j_{D-1}}\right) \\
+    &\dots \\
+    &= \sum_{i_1=0}^{+\infty}\dots \sum_{i_D=0}^{+\infty} \sum_{j_1=0}^{i_1} \dots \sum_{j_D=0}^{i_D} F_{j_1, \dots, j_D, i_{D+1}, \dots, i_M}\times G_{i_1-j_1, \dots, i_D-j_D, j_{D+1}, \dots, j_N} \times (z_1-c_1)^{i_1}\dots(z_D-c_D)^{i_D}
+\end{align*}
+
+Thus, the coefficients of the resulting series are 
+$$\sum_{j_1=0}^{i_1} \dots \sum_{j_D=0}^{i_D} F_{j_1, \dots, j_D, i_{D+1}, \dots, i_M} \times G_{i_1-j_1, \dots, i_D-j_D, j_{D+1}, \dots, j_N}$$
+
+\subsubsection{Differentiation of an EvaluatedSymbolicSeries}
+
+Let $F(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty} \sum_{i_D=0}^{+\infty} F_{i_1, \dots, i_D} (x_1-c_1)^{i_1} \dots (x_D-c_D)^{i_D}$
+
+Then 
+
+$$\frac{\partial F}{\partial x_j}(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty} \dots \sum_{i_D=0}^{+\infty} (i_j+1)F_{i_1, \dots, i_j+1, \dots, i_D} (x_1-c_1)^{i_1} \dots (x_D-c_D)^{i_D}$$
+
+\subsubsection{Integration of EvaluatedSymbolicSeries}
+
+The integration with respect to one of the series' variables is defined as
+
+$$\int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D) dy = \sum_{i_1=0}^{+\infty}\dots \sum_{i_j=1}^{+\infty} \dots \sum_{i_D=0}^{+\infty}\frac{1}{i_j}F_{i_1, \dots, i_j-1, \dots, i_D}(x_1-c_1)^{i_1}\dots (x_D-c_D)^{i_D}$$
+
+It is then possible to define 
+
+$$\int_{a}^{b}F(x_1, \dots, x_j, \dots, x_D)dx_j = G(x_1, \dots, b, \dots, x_D) - G(x_1, \dots, a, \dots, x_D)$$ where $G(x_1, \dots, x_j, \dots, x_D) = \int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D)dy$
+
+Finally, since addition and substracion between a \code{SymbolicSeries} and a \code{SymbolicSeries\{0\}} is defined, when $f(x) = \sum_{i=0}^{+\infty}f_i (x-c)^i$, it is possible to define 
+
+$$\int_{a}^{b}f(x)dx = F(b)-F(a)$$
+
+where $F(x) = \int_{c}^{x} f(y) dy$
 
 \begin{thebibliography}{99}
 

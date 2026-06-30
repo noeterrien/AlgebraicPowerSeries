@@ -76,7 +76,7 @@ orders1 = [5, 10, 25, 50, 75, 100]
 orders2 = [5, 10, 25, 50]
 
 # ╔═╡ 346cfbd8-bce2-4cb6-8bfb-3d4951934683
-orders3 = [10, 15, 50, 60, 70]
+orders3 = [40, 50, 60, 70]
 
 # ╔═╡ d0157777-96f4-4ff3-bdfe-c765efd12645
 md"""
@@ -132,6 +132,9 @@ fig[1,2] = Legend(fig, ax1, "orders", framevisible=false)
 
 # ╔═╡ a2db92eb-ce1a-4be4-bbbd-c9faa6a5adb0
 display(fig)
+
+# ╔═╡ f0446ca1-9616-432a-acd6-9ea5cc33ff52
+save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0) - part0.png", fig; px_per_unit=4)
 
 # ╔═╡ fd6f4173-0001-40bf-bd98-78124bc7c69d
 md"""
@@ -206,6 +209,12 @@ end
 # ╔═╡ 24566770-167e-4a3d-96f7-da0fa3276a27
 fig[2,2] = Legend(fig, ax2, "orders", framevisible=false)
 
+# ╔═╡ 0990246d-6302-43f9-9a40-9aa15bb3d209
+display(fig)
+
+# ╔═╡ 3df96d0b-c7a6-43d6-8724-541a19808fb4
+save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0)-part1.png", fig; px_per_unit=4)
+
 # ╔═╡ b98b5c3e-7365-4575-8c2f-df39a49077de
 ax3 = Axis(fig[3,1]; title="K(1,y) with K centered at (1,0)", xlabel="y", limits=(nothing, nothing, -10, 10))
 
@@ -222,16 +231,19 @@ fig[3,2] = Legend(fig, ax3, "orders", framevisible=false)
 # ╔═╡ 7e6d54b6-9ec7-4a27-807b-df51bf400469
 display(fig)
 
+# ╔═╡ 627bfa83-9545-4393-9ad5-6aadd4ee4df6
+save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0) - part2.png", fig; px_per_unit=4)
+
 # ╔═╡ 239eef32-cedf-4990-8c82-8f7462b91e98
 md"""
 # PDESeries centered at (0,0) and translated to (1,0)
 """
 
 # ╔═╡ 5f3389a8-6e59-455c-aa82-d24c8d4d1e5f
-trunc_order1 = orders1[4]
+trunc_order1 = orders1[6]
 
 # ╔═╡ 03e569b5-dfb3-4fcc-979d-b97e8218cb09
-trunc_order2 = orders1[6]
+trunc_order2 = orders1[4]
 
 # ╔═╡ 2f2ee767-ff71-4188-a388-8aacd60b35a9
 tr_K_ps = TranslatedSeries(:K1_tr, K1_ps, [1,0])
@@ -250,28 +262,6 @@ begin
 	end
 end
 
-# ╔═╡ 6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
-begin
-	Ks5 = []
-	for order in orders2
-		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order1)
-		K5, = build_matrix_elt(tr_K_ps, order)
-		boundary_K5(y) = K5(1,y)				
-		push!(Ks5, boundary_K5)
-	end
-end
-
-# ╔═╡ a5e57c56-2120-486e-a7ea-070d0eeb4d60
-begin
-	Ks6 = []
-	for order in orders2
-		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order2)
-		K6, = build_matrix_elt(tr_K_ps, order)
-		boundary_K6(y) = K6(1,y)				
-		push!(Ks6, boundary_K6)
-	end
-end
-
 # ╔═╡ 3dded5a7-344c-49ed-a2db-65822d2e3063
 ax4 = Axis(fig[1,3]; title="K(1,y) with K centered at (0,0) and translated to (1,0)", xlabel="y", limits=(nothing, nothing, -10, 10))
 
@@ -284,29 +274,81 @@ end
 # ╔═╡ 4167bd16-e512-4b7b-b86b-e36a6dce5e4b
 fig[1,4] = Legend(fig, ax4, "orders", framevisible=false)
 
+# ╔═╡ a2ffc15b-6ecb-46ae-b035-94984b8e3deb
+display(fig)
+
+# ╔═╡ ccc78e3d-e3e8-4557-8909-bf532189e5d1
+save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0) - part3.png", fig; px_per_unit=4)
+
+# ╔═╡ 6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
+begin
+	Ks5 = []
+	for order in orders2
+		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order1)
+		K5, = build_matrix_elt(tr_K_ps, order)
+		boundary_K5(y) = K5(1,y)				
+		push!(Ks5, boundary_K5)
+	end
+end
+
 # ╔═╡ 5c06cf81-34f0-4b91-aa80-cedc10a03e4e
+#=╠═╡
 ax5 = Axis(fig[2,3]; title="K(1,y) with K centered at (0,0) and translated to (1,0)", xlabel="y", limits=(nothing, nothing, -10, 10))
+  ╠═╡ =#
 
 # ╔═╡ 4657c1aa-1628-419c-9e2e-862f49d53e93
+#=╠═╡
 # display result
 for (order, f) in zip(orders2, Ks5)
 	lines!(ax5, y_range, f.(y_range); label="N = $order")
 end
+  ╠═╡ =#
 
 # ╔═╡ b94f0c3a-9166-4645-ac92-24261ab45eed
+#=╠═╡
 fig[2,4] = Legend(fig, ax5, "orders", framevisible=false)
+  ╠═╡ =#
+
+# ╔═╡ b8e1de4d-d62b-47e4-a0b6-8f761e62705e
+#=╠═╡
+display(fig)
+  ╠═╡ =#
+
+# ╔═╡ 6fde1005-b552-4c89-81bb-42957ebe4494
+#=╠═╡
+save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0) - part4.png", fig; px_per_unit=4)
+  ╠═╡ =#
+
+# ╔═╡ a5e57c56-2120-486e-a7ea-070d0eeb4d60
+#=╠═╡
+begin
+	Ks6 = []
+	for order in orders2
+		compute_coefficients!(tr_K_ps, order; trunc_order=trunc_order2)
+		K6, = build_matrix_elt(tr_K_ps, order)
+		boundary_K6(y) = K6(1,y)				
+		push!(Ks6, boundary_K6)
+	end
+end
+  ╠═╡ =#
 
 # ╔═╡ 2d7594ae-7153-44d8-b609-9818ceb059ad
+#=╠═╡
 ax6 = Axis(fig[3,3]; title="K(1,y) with K centered at (0,0) and translated to (1,0)", xlabel="y", limits=(nothing, nothing, -10, 10))
+  ╠═╡ =#
 
 # ╔═╡ 3faaeff1-aae5-4883-be84-6855ee105612
+#=╠═╡
 # display result
 for (order, f) in zip(orders2, Ks6)
 	lines!(ax6, y_range, f.(y_range); label="N = $order")
 end
+  ╠═╡ =#
 
 # ╔═╡ 50c8475e-0935-466b-ab70-5db99be4bac5
+#=╠═╡
 fig[3,4] = Legend(fig, ax6, "orders", framevisible=false)
+  ╠═╡ =#
 
 # ╔═╡ e95f6771-984d-4f1d-ac24-f4554a84e431
 md"""
@@ -314,10 +356,14 @@ md"""
 """
 
 # ╔═╡ 0dc1e94b-61fd-4739-9dee-38f7e24946c1
+#=╠═╡
 display(fig)
+  ╠═╡ =#
 
 # ╔═╡ 7da23a18-7df6-4060-8070-923a752b7f84
+#=╠═╡
 save("comparison between centered at (0,0), centered at (1,0) and translated from (0,0) to (1,0).png", fig; px_per_unit=4)
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
@@ -349,6 +395,7 @@ save("comparison between centered at (0,0), centered at (1,0) and translated fro
 # ╠═6295029b-f446-4f42-a29f-45d867e62610
 # ╠═45c21971-edd4-4475-9d31-1fad480ec500
 # ╠═a2db92eb-ce1a-4be4-bbbd-c9faa6a5adb0
+# ╠═f0446ca1-9616-432a-acd6-9ea5cc33ff52
 # ╟─fd6f4173-0001-40bf-bd98-78124bc7c69d
 # ╠═b0c9dc40-aba4-482b-bb39-f5e3a5f97771
 # ╠═8871981d-24d5-427b-8e5d-d11b5aa75661
@@ -359,23 +406,30 @@ save("comparison between centered at (0,0), centered at (1,0) and translated fro
 # ╠═273dd6a3-140e-4ff7-b2c5-a54606e17360
 # ╠═5752f576-1286-46c5-9888-ada84d660f24
 # ╠═24566770-167e-4a3d-96f7-da0fa3276a27
+# ╠═0990246d-6302-43f9-9a40-9aa15bb3d209
+# ╠═3df96d0b-c7a6-43d6-8724-541a19808fb4
 # ╠═b98b5c3e-7365-4575-8c2f-df39a49077de
 # ╠═cfdb8055-001c-40b8-8b9a-570d90dde7c1
 # ╠═7a8d9ce8-e369-4748-a477-750528a0d3c6
 # ╠═7e6d54b6-9ec7-4a27-807b-df51bf400469
+# ╠═627bfa83-9545-4393-9ad5-6aadd4ee4df6
 # ╟─239eef32-cedf-4990-8c82-8f7462b91e98
 # ╠═5f3389a8-6e59-455c-aa82-d24c8d4d1e5f
 # ╠═03e569b5-dfb3-4fcc-979d-b97e8218cb09
 # ╠═2f2ee767-ff71-4188-a388-8aacd60b35a9
 # ╠═fe19f8ab-4724-4ab3-9df5-5774e1068bc1
-# ╠═6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
-# ╠═a5e57c56-2120-486e-a7ea-070d0eeb4d60
 # ╠═3dded5a7-344c-49ed-a2db-65822d2e3063
 # ╠═8710aa04-7e07-4d7a-8685-5e57edf2139e
 # ╠═4167bd16-e512-4b7b-b86b-e36a6dce5e4b
+# ╠═a2ffc15b-6ecb-46ae-b035-94984b8e3deb
+# ╠═ccc78e3d-e3e8-4557-8909-bf532189e5d1
+# ╠═6af46c86-e1ab-4289-8f7b-ec6b6eb40ae2
 # ╠═5c06cf81-34f0-4b91-aa80-cedc10a03e4e
 # ╠═4657c1aa-1628-419c-9e2e-862f49d53e93
 # ╠═b94f0c3a-9166-4645-ac92-24261ab45eed
+# ╠═b8e1de4d-d62b-47e4-a0b6-8f761e62705e
+# ╠═6fde1005-b552-4c89-81bb-42957ebe4494
+# ╠═a5e57c56-2120-486e-a7ea-070d0eeb4d60
 # ╠═2d7594ae-7153-44d8-b609-9818ceb059ad
 # ╠═3faaeff1-aae5-4883-be84-6855ee105612
 # ╠═50c8475e-0935-466b-ab70-5db99be4bac5
