@@ -1304,6 +1304,9 @@ Base.zero(ess::EvaluatedSymbolicSeries) = Base.zero(ess.series)(ess.variables...
     the order of s1 is kept
 """
 function Base.:+(s1::EvaluatedSymbolicSeries{D}, s2::EvaluatedSymbolicSeries{D}) where D
+    isequal(Set(s1.variables), Set(s2.variables)) || throw(ArgumentError("Can only add SymbolicSeries \
+                                                         evaluated in the same variables"))
+    
     # if necessary, swap indices of s2
     var_idx = Dict([v => i for (i,v) in enumerate(s1.variables)])
     index = generate_index_list(length(s1.variables))

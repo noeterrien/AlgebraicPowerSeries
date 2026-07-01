@@ -259,11 +259,11 @@ To write equations, several operations are implemented between \code{SymbolicSer
         operation & first argument & second argument \\
         \hline
         + & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
-          & \code{SymbolicSeries\{D\}} & \code{Number} \\
+        \textit{(both series must have the same centers)}  & \code{SymbolicSeries\{D\}} & \code{Number} \\
           & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
         \hline
         - & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
-          & \code{SymbolicSeries} & \code{Number} \\
+        \textit{(both series must have the same centers)} & \code{SymbolicSeries} & \code{Number} \\
           & \code{SymbolicSeries} & \code{SymbolicSeries\{0\}} \\
           & \code{SymbolicSeries}      & -------------------------- \\
         \hline
@@ -289,13 +289,13 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
         operation & first argument & second argument \\
         \hline
         + & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
-          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+        \textit{(both series must have the same centers)}  & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
         \hline
         - & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
-          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+        \textit{(both series must have the same centers)}  & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
@@ -321,7 +321,7 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
           & (will also work with arrays of EvaluatedSymbolicSeries) & \\
         \hline \\
         \textasciitilde & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
-          & \code{EvaluatedSymbolicSeries} & \code{Number} \\
+          \textit{(both series must have the same centers)} & \code{EvaluatedSymbolicSeries} & \code{Number} \\
         \hline
     \end{tabular}
 \end{center}
