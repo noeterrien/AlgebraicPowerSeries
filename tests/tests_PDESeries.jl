@@ -74,6 +74,11 @@ test2_ss = SymbolicSeries(test2_ts)
 @test getNum(test2_ss(x,x,x)[1,N=2]) ≈ 6
 @test getNum(test2_ss(x,x,x)[2,N=2]) ≈ 7
 
+@test getNum(translate(test2_ss, [0,0,0])(0,0,0)[N=2]) ≈ -2
+@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[0,N=2]) ≈ -2
+@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[1,N=2]) ≈ -8
+@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[2,N=2]) ≈ 7
+
 
 
 #-----------------------------------------------------Real use-case testing-----------------------------------------------

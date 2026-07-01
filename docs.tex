@@ -259,16 +259,16 @@ To write equations, several operations are implemented between \code{SymbolicSer
         operation & first argument & second argument \\
         \hline
         + & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
-        \textit{(both series must have the same centers)}  & \code{SymbolicSeries\{D\}} & \code{Number} \\
+          & \code{SymbolicSeries\{D\}} & \code{Number} \\
           & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
         \hline
         - & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
-        \textit{(both series must have the same centers)} & \code{SymbolicSeries} & \code{Number} \\
+          & \code{SymbolicSeries} & \code{Number} \\
           & \code{SymbolicSeries} & \code{SymbolicSeries\{0\}} \\
           & \code{SymbolicSeries}      & -------------------------- \\
         \hline
         * & \code{SymbolicSeries} & \code{Number} \\
-        \textit{(both series must have the same centers)}  & \code{SymbolicSeries\{1\}} & \code{SymbolicSeries\{1\}} \\
+          & \code{SymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
         \hline
         / & \code{SymbolicSeries} & \code{Number} \\
         \hline
@@ -289,20 +289,20 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
         operation & first argument & second argument \\
         \hline
         + & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
-        \textit{(both series must have the same centers)}  & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
         \hline
         - & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{D\}} \\
-        \textit{(both series must have the same centers)}  & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
+          & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{D\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{Number} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{SymbolicSeries\{0\}} \\
           & \code{EvaluatedSymbolicSeries\{D\}} & \code{EvaluatedSymbolicSeries\{0\}} \\
           & \code{EvaluatedSymbolicSeries}      & -------------------------- \\
         \hline
         * & \code{EvaluatedSymbolicSeries} & \code{Number} \\
-        \textit{(center components must be the same between the two series)}  & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
+          & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
         \hline
         / & \code{EvaluatedSymbolicSeries} & \code{Number} \\
         \hline
@@ -321,12 +321,12 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
           & (will also work with arrays of EvaluatedSymbolicSeries) & \\
         \hline \\
         \textasciitilde & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
-          \textit{(both series must have the same centers)} & \code{EvaluatedSymbolicSeries} & \code{Number} \\
+          & \code{EvaluatedSymbolicSeries} & \code{Number} \\
         \hline
     \end{tabular}
 \end{center}
 
-Details on the implementation can be found in the \nameref{sec:app}
+Details on the implementation can be found in the \nameref{sec:app}.
 
 Once again, if it makes sense mathematically, arguments can be used in the other order.
 
@@ -347,7 +347,7 @@ The constructors for the \code{PDESeries} and \code{LocalizedPDESeries} are exac
 
 Additionnaly, if the unknown series in your equations is integrated, you will need to provide an additionnal argument: \code{maxIntegrationOrders::Vector\{Int\}}. For each equation, indicate how many times the unknown series has been integrated at most. This will be used to deduce which equations should be solved when computing the coefficients. 
 
-The main difference between \code{PDESeries} and \code{LocalizedPDESeries} comes from the algorithmic comlexity of the coefficients' computation, and when they can be used: Some operations, such as evaluating a \code{SymbolicSeries} at the wrong points or variables, or integrating between "non-natural" bounds will make the resulting series' coefficients depend on an infinite number of coefficients. This implies that to be computed numerically, the coefficients expressions will have to be truncated up to a certain order. In this case, \code{LocalizedPDESeries} should be used. 
+The main difference between \code{PDESeries} and \code{LocalizedPDESeries} comes from the algorithmic comlexity of the coefficients' computation, and when they can be used: Some operations, such as evaluating a \code{SymbolicSeries} at the wrong points or variables, or summing two series that do not have the same center component, or integrating might make the resulting series' coefficients depend on an infinite number of coefficients. This implies that to be computed numerically, the coefficients expressions will have to be truncated up to a certain order. In this case, \code{LocalizedPDESeries} should be used. 
 
 Otherwise, \code{PDESeries} can be used. When using \code{PDESeries}, coefficients can be computed with their exact value order by order, this results in the algorithmic complexity being $O(N\times N^D)$ where $N$ is the order up to which the coefficients are computed and $D$ the number of variables. 
 
@@ -806,23 +806,32 @@ Once again, the use of \code{LocalizedPDESeries} is required. One then proceeds 
 
 \subsection{Operations defined on SymbolicSeries}
 
-The operations +, -, / and multiplication by a scalar for \code{SymbolicSeries} are straight forward. We present how the multiplication of two \code{SymbolicSeries{1}} is handled:
+The operations +, -, / and multiplication by a scalar for \code{SymbolicSeries} that have the same centers are straight forward.
 
-Let $f(x) = \sum_{i=0}^{+\infty}f_i x^i$ and $g(x) = \sum_{i=0}^{+\infty}g_i x^i$ (since both series are supposed to have the center, for the sake of simplicity, let's assume this center is $0$)
+We present here how translation of a series in case one tries to do an operation between two series that do not have the same centers happen, and how multiplication of two series is implemented
 
-Then 
+\subsubsection{Translation of a SymbolicSeries}
+
+For the sake of simplicity, let us focus on translation of a series of one variable:
+
+In this case, let's say that we want the center $c$ to become $c'$. We have
+
 \begin{align*}
-    f(x)g(x) &= \left(\sum_{i=0}^{+\infty}f_i x^i\right)\left(\sum_{i=0}^{+\infty}g_i x^i\right) \\ 
-    &= \sum_{i=0}^{+\infty}\left(\sum_{j=0}^{i}f_j g_{i-j}\right) x^i
+    f(x) = \sum_{i=0}^{+\infty} f_i (x-c)^i \\
+    &= \sum_{i=0}^{+\infty} f_i (x-c' + c'-c)^i \\
+    &= \sum_{i=0}^{+\infty} f_i \sum_{k=0}^{i} \binom{i}{k} (x-c')^k (c'-c)^{i-k} \\
+    &= \sum_{k=0}^{+\infty} \left(\sum_{i=k}^{+\infty} \binom{i}{k}f_i (c'-c)^{i-k}\right)(x-c')^k
 \end{align*}
 
-Thus the resulting series' coefficients are $\sum_{j=0}^{i}f_j g_{i-j}, i \in \N$.
+For a series of multiple variables, one simply multiplies the binomial coefficients and powers of the center components difference. i.e : 
 
-\subsection{Operations defined on EvaluatedSymbolicSeries}
+$$f(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty} \dots \sum_{i_D=0}^{+\infty} \sum_{k_1=i_1}^{+\infty} \dots \sum_{k_D=i_D}^{+\infty}\binom{i_1}{k_1} \dots \binom{i_D}{k_D} f_{i_1, \dots, i_D} (c'_1 - c_1)^{i_1-k_1} \dots (c'_D -c_D)^{i_D-k_D}$$
 
-Operators +, -, /, \textasciitilde and multiplication by a scalar are straight forward for \code{EvaluatedSymbolicSeries}. Here is the explanation of how multiplication of two series, differentiation and integration are handled.
+Notice that the resulting series' coefficients depend on an infinite number of the original series' coefficients and will thus require the use of LocalizedPDESeries rather than PDESeries.
 
-\subsubsection{Multiplication of two EvaluatedSymbolicSeries}
+This translation operation is implemented with the \code{translate} function.
+
+\subsubsection{Multiplication of two SymbolicSeries}
 
 Let $F(x_1, \dots, x_M) = \sum_{i_1=0}^{+\infty}\dots\sum_{i_M=0}^{+\infty}F_{i_1, \dots, i_M}(x_1-c_1)^{i_1} \dots (x_M-c_M)^{i_M}$ and \\
 $G(y_1, \dots, y_N) = \sum_{j_1=0}^{+\infty}\dots\sum_{j_N=0}^{+\infty}G_{j_1, \dots, j_N}(y_1-c'_1)^{j_1} \dots (y_N-c'_N)^{j_N}$
@@ -854,6 +863,14 @@ where
 Thus, the coefficients of the resulting series are 
 $$\sum_{j_1=0}^{i_1} \dots \sum_{j_D=0}^{i_D} F_{j_1, \dots, j_D, i_{D+1}, \dots, i_M} \times G_{i_1-j_1, \dots, i_D-j_D, j_{D+1}, \dots, j_N}$$
 
+\subsection{Operations defined on EvaluatedSymbolicSeries}
+
+Operators +, -, /, \textasciitilde and multiplication are straight forward for \code{EvaluatedSymbolicSeries}. Here is the explanation of how differentiation and integration are handled.
+
+Additionnaly, if one wants to perform operations on series which do not have the same variables, or not in the same order, it is possible and these functionalities are handled by the \code{union\_variables} and \code{swap\_variables} functions respectively (and are used by default by the operators presented here)
+
+
+
 \subsubsection{Differentiation of an EvaluatedSymbolicSeries}
 
 Let $F(x_1, \dots, x_D) = \sum_{i_1=0}^{+\infty} \sum_{i_D=0}^{+\infty} F_{i_1, \dots, i_D} (x_1-c_1)^{i_1} \dots (x_D-c_D)^{i_D}$
@@ -871,12 +888,6 @@ $$\int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D) dy = \sum_{i_1=0}^{+\infty}\dots 
 It is then possible to define 
 
 $$\int_{a}^{b}F(x_1, \dots, x_j, \dots, x_D)dx_j = G(x_1, \dots, b, \dots, x_D) - G(x_1, \dots, a, \dots, x_D)$$ where $G(x_1, \dots, x_j, \dots, x_D) = \int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D)dy$
-
-Finally, since addition and substracion between a \code{SymbolicSeries} and a \code{SymbolicSeries\{0\}} is defined, when $f(x) = \sum_{i=0}^{+\infty}f_i (x-c)^i$, it is possible to define 
-
-$$\int_{a}^{b}f(x)dx = F(b)-F(a)$$
-
-where $F(x) = \int_{c}^{x} f(y) dy$
 
 \begin{thebibliography}{99}
 

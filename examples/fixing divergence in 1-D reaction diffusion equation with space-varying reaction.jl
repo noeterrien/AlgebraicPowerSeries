@@ -221,7 +221,7 @@ begin
 	K2 = SymbolicSeries(unknown2, center)
 
 	BC1_2 = K2(x,0) ~ 0
-	BC2_2 = K2(x,x) ~ -1/(2*ε) * ∫(λ_x + c, 0, x)
+	BC2_2 = K2(x,x) ~ -1/(2*ε) * ∫(λ_x + c, 0, x, x)
 
 	PDE_2 = ∂²x(K2(x,y)) - ∂²y(K2(x,y)) ~ (λ_y+c)/ε * K2(x,y)
 
@@ -413,7 +413,7 @@ begin
 	K3 = SymbolicSeries(unknown3, center2)
 
 	BC1_3 = K3(x,0) ~ 0
-	BC2_3 = K3(x,x) ~ -1/(2*ε) * ∫(λ_1(x) + c, 0, x)
+	BC2_3 = K3(x,x) ~ -1/(2*ε) * ∫(λ_1(x) + c, 0, x, x)
 
 	PDE_3 = ∂²x(K3(x,y)) - ∂²y(K3(x,y)) ~ (λ_1(y)+c)/ε * K3(x,y)
 
