@@ -316,9 +316,7 @@ Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of
     \begin{tabular}{ | m{100pt} | m{169pt} | m{149pt} | } 
         \hline
         $\int$ & \code{EvaluatedSymbolicSeries} & $x$, a variable of the series\\
-          & \code{EvaluatedSymbolicSeries} & $a$, $b$, $x$ where $a$ is the lower bound, $b$ the upper bound (both constants) and $x$ a variable of the series \\
-          & \code{EvaluatedSymbolicSeries\{1\}} & $a$, $b$, where $a$ and $b$ must have at most one variable \\
-          & (will also work with arrays of EvaluatedSymbolicSeries) & \\
+          & \code{EvaluatedSymbolicSeries} & $a$, $b$, $x$ where $a$ is the lower bound, $b$ the upper bound (Allowed arguments are the same as those allowed for evaluating a SymbolicSeries) and $x$ a variable of the series \\
         \hline \\
         \textasciitilde & \code{EvaluatedSymbolicSeries} & \code{EvaluatedSymbolicSeries} \\
           & \code{EvaluatedSymbolicSeries} & \code{Number} \\
@@ -885,7 +883,7 @@ The integration with respect to one of the series' variables is defined as
 
 $$\int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D) dy = \sum_{i_1=0}^{+\infty}\dots \sum_{i_j=1}^{+\infty} \dots \sum_{i_D=0}^{+\infty}\frac{1}{i_j}F_{i_1, \dots, i_j-1, \dots, i_D}(x_1-c_1)^{i_1}\dots (x_D-c_D)^{i_D}$$
 
-It is then possible to define 
+It is then possible to define
 
 $$\int_{a}^{b}F(x_1, \dots, x_j, \dots, x_D)dx_j = G(x_1, \dots, b, \dots, x_D) - G(x_1, \dots, a, \dots, x_D)$$ where $G(x_1, \dots, x_j, \dots, x_D) = \int_{c_j}^{x_j}F(x_1, \dots, y, \dots, x_D)dy$
 

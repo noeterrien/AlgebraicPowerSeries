@@ -968,7 +968,7 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
     # The `translate` function can be called even though N is not needed if some center'
     # components are undefined. Furthermore, some center components of the new center might
     # match those of the old center
-    
+
     ranges = []
     range_idx = 0
     idx_to_range_idx = Dict{Int, Int}()
@@ -1038,9 +1038,11 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
                 end
             end
 
-            res = res ∪ s.get_selfseries_coefficients(idx...)
+            res = res ∪ s.get_selfseries_coefficients(idx...; N=N)
         end
-        
+
+        res
+
     end
 
     SymbolicSeries(op, new_center, get_selfseries_coefficients)
@@ -1049,7 +1051,9 @@ end
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        return s1 + translate(s2, s1.center)
+        new_s2 = translate(s2, s1.center)
+        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        return new_s1 + new_s2
     end
 
     op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
@@ -1075,7 +1079,9 @@ Base.:+(c::SymbolicSeries{0}, s::SymbolicSeries) = s+c
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        return s1 - translate(s2, s1.center)
+        new_s2 = translate(s2, s1.center)
+        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        return new_s1 - new_s2
     end
 
     op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2])
@@ -1140,22 +1146,24 @@ end
 function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        return s1 * translate(s2, s1.center)
+        new_s2 = translate(s2, s1.center)
+        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        return new_s1 * new_s2
     end
 
     arg(I::Vararg; params=[]) = NlinearSeriesOperation(v -> v[1]*v[2],
                                                        [s1[I..., N=params[end]], 
-                                                        s2[(I.-params[1:D])..., N=params[end]]
+                                                        s2[(params[1:D].-I)..., N=params[end]]
                                                        ])
 
-    op = MultilinearSeriesOperation(v -> +(v...), arg, [generate_index_list; :∞], [(0, Symbol("idx$i")) for i in 1:D])
+    op = MultilinearSeriesOperation(v -> +(v...), arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
 
 
 
     function get_self_series_coefficients(I::Vararg{Int, D}; N=nothing)
         ranges = CartesianIndices(tuple([0:i for i in I]...))
-        union([s1.get_selfseries_coefficients(idx...) ∪ 
-               s2.get_selfseries_coefficients((I.-idx)...)
+        union([s1.get_selfseries_coefficients(Tuple(idx)...; N=N) ∪ 
+               s2.get_selfseries_coefficients((I.-Tuple(idx))...; N=N)
                for idx in ranges]...)
     end
 
@@ -1412,7 +1420,7 @@ function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     old_vars_idx = Dict([v => i for (i,v) in enumerate(s.variables)])
     new_vars_idx = Dict([v => i for (i,v) in enumerate(new_vars)])
 
-    new_center = s.center[[old_vars_idx[v] for v in new_vars]]
+    new_center = s.series.center[[old_vars_idx[v] for v in new_vars]]
 
     op = NlinearSeriesOperation(v -> s[v[[new_vars_idx[var] for var in s.variables]]..., N=v[end]], 
                                 [generate_index_list(D); :∞])
@@ -1420,7 +1428,7 @@ function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
         s.series.get_selfseries_coefficients(I[[new_vars_idx[var] for var in s.variables]]..., N=N)
 
-    SymbolicSeries(op, new_center, get_selfseries_coefficients)
+    SymbolicSeries(op, new_center, get_selfseries_coefficients)(new_vars...)
 end
 
 
@@ -1432,18 +1440,18 @@ end
 """
 function union_variables(s::EvaluatedSymbolicSeries{D1}, vars::Vector) where D1
 
-    new_vars = [s.variables; [setdiff(Set(s.variables), Set(vars))...]]
+    new_vars = [s.variables; [setdiff(Set(vars), Set(s.variables))...]]
     D = length(new_vars)
 
     new_center = [s.series.center; fill(:unspecified, D-D1)]
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[D1+1:D]) ? s1[v[1:D1]..., N=v[end]] : 0, 
+    op = NlinearSeriesOperation(v -> all(==(0), v[D1+1:D]) ? s[v[1:D1]..., N=v[end]] : 0, 
                                 [generate_index_list(D); :∞])
 
-    get_self_series_coefficients(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? 
-        s.series.get_self_series_coefficients(I[1:D1]...; N=N) : Set()
+    get_selfseries_coefficients(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? 
+        s.series.get_selfseries_coefficients(I[1:D1]...; N=N) : Set()
 
-    SymbolicSeries(op, new_center, get_self_series_coefficients)(new_vars...)
+    SymbolicSeries(op, new_center, get_selfseries_coefficients)(new_vars...)
 end
 
 
@@ -1457,7 +1465,7 @@ function Base.:+(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
 
     if isequal(s1.variables, s2.variables)
         (s1.series + s2.series)(s1.variables...)
-    elseif isequal(isequal(Set(s1.variables), Set(s2.variables)))
+    elseif isequal(Set(s1.variables), Set(s2.variables))
         s1 + swap_variables(s2, s1.variables)
     else
         union_variables(s1, s2.variables) + union_variables(s2, s1.variables)
@@ -1484,7 +1492,7 @@ function Base.:-(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
 
     if isequal(s1.variables, s2.variables)
         (s1.series - s2.series)(s1.variables...)
-    elseif isequal(isequal(Set(s1.variables), Set(s2.variables)))
+    elseif isequal(Set(s1.variables), Set(s2.variables))
         s1 - swap_variables(s2, s1.variables)
     else
         union_variables(s1, s2.variables) - union_variables(s2, s1.variables)
@@ -1549,7 +1557,7 @@ function Base.:*(s1::EvaluatedSymbolicSeries, s2::EvaluatedSymbolicSeries)
     
     if isequal(s1.variables, s2.variables)
         (s1.series * s2.series)(s1.variables...)
-    elseif isequal(isequal(Set(s1.variables), Set(s2.variables)))
+    elseif isequal(Set(s1.variables), Set(s2.variables))
         s1 * swap_variables(s2, s1.variables)
     else
         union_variables(s1, s2.variables) * union_variables(s2, s1.variables)
@@ -1572,7 +1580,7 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
     
     op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1]*v[2], 
                                                             [(u[x_idx]+1), 
-                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):D]...,N=(isnothing(u[end]) ? nothing : u[end]+1)]])
+                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):D]..., N=(isnothing(u[end]) ? nothing : u[end]+1)]])
                                 , [index; :∞])
     
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = new_s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N+1))
@@ -1863,6 +1871,7 @@ function PDES_should_discard_new_equation(unknowns::Set{<:SeriesCoefficient}, N:
     isempty(unknowns) && return true
 
     for uk in unknowns
+        println("coeff : $uk, order : $(getOrder(uk))")
         getOrder(uk) > N && return true
     end
 

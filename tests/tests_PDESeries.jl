@@ -112,7 +112,7 @@ let
     R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
     @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
     @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][1,0], K[1][0,1], K[1][0,0]])
-    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0], K[1][1,0], K[2][1,0], K[1][0,0], K[2][0,0]])
 
     # main PDE
     K = K_ss(x,ξ)
@@ -148,7 +148,7 @@ let
     R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
     @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
     @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][1,0], K[1][0,1], K[1][0,0]])
-    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0], K[1][1,0], K[2][1,0], K[1][0,0], K[2][0,0]])
     
     # main PDE
     K = K_ss(x,ξ)
