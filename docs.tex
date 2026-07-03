@@ -3,6 +3,7 @@
 % ---- Packages ----
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{xcolor}
 \usepackage{textcomp}
 \usepackage{newunicodechar}
 \usepackage{amsmath,amssymb,amsthm,amsfonts}
@@ -329,6 +330,47 @@ Details on the implementation can be found in the \nameref{sec:app}.
 Once again, if it makes sense mathematically, arguments can be used in the other order.
 
 The operator \code{\textasciitilde} is used to create \code{SymbolicSeriesEquation}, i.e equations between series. That can then be used to construct \code{PDESeries} and \code{LocalizedPDESeries}
+
+\color{red}
+\subsubsection{An important note on the use of operators with series that do not have the same variables or centers}
+\color{black}
+
+The available operations on SymbolicSeries make this module quite flexible. However, the user should be aware that operators \code{+}, \code{-}, \code{*}, and \code{\textasciitilde} are not completely symmetric, especially when used with series that do not share the same variables or centers. Here is how this case is handled:
+
+\begin{itemize}
+    \item First, if the series do not have the same variables, the missing variables are added to each series. This operation is symmetric.
+    \item Secondly, if the variables are not in the same order, the variables of the right term are put in the same order as the variables of the left term. While not symmetric, this operation does not introduce any algorithmic complexity
+    \item Thirdly, if the centers do not match, unspecified components (that may come from variables padding) are set to the other series' components. This again is symmetric
+    \item Lastly, if the centers still do not match, the center of the second series is translated to the center of the first series. This is not symmetric and introduces algorithmic complexity, as well as the need to use LocalizedPDESeries instead of PDESeries. When this happens, a warning is triggered. You can read \nameref{sec:translate} for details on the implemntation
+\end{itemize}
+
+The translation phase might make it impossible to compute the coefficients, due to how equations between the series' coefficients are inferred, especially when differential operators are present. Here is an example of an equation and how it is handled:
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+    PDE = D2x(K(x,y)) - D2y(K(x,y)) ~ K(x,y)*(l(y)+c)/e
+\end{minted}
+
+Here, \code{K} is centered at $(0,1)$ and \code{l} is centered at $0$. \code{D2x} and \code{D2y} represent the differential operators at order 2 in $x$ and $y$. 
+
+For the left hand side of the equation, everything has the same variables, in the same order, and the same center. Thus the resulting left hand side is a series in variables $(x,y)$ and centered at $(0,1)$.
+
+For the right hand side, $\frac{l(y) + c}{e}$ is a series in $y$, centered at $0$. Thus, it is first transformed to a series in $(y,x)$ that has center $(0, :unspecified)$. Then since the order of variables does not match $K$, it is transformed into a series in $(x,y)$, and center $(:unspecified, 0)$. Finally, the unspecified center component is matched with $K$ and it becomes centered at $(0,1)$.
+
+In the end, the \code{\textasciitilde} operator does not need any reordering of variables or translation so everything works fine.
+
+Now let's imagine that the equation was written as 
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+    PDE = (l(y)+c)/e * K(x,y) ~ D2x(K(x,y)) - D2y(K(x,y))
+\end{minted}
+
+instead
+
+Then for the left hand side, $\frac{l(y)+c}{e}$ is first padded to become a series that has variables $(y,x)$ and centered at $(0, :unspecified)$. Then, K variables are inverted so it becomes a series in $(y,x)$ and centered at $(1,0)$. Then the unspecified center component of $\frac{l(y) + c}{e}$ is replaced with $0$ and finally $K$ is translated to be centered around $(0,0)$.
+
+This time, when the \code{\textasciitilde} operator is called, it first has to reorder the variables of the right hand side, and then translate it to $(0,0)$. This means that the right hand side ultimately depends on every coefficients of \code{D2x(K(x,y)) - D2y(K(x,y))} and since there are second derivatives, for a given computation order \code{N}, the right hand side will depend on every coefficients of \code{K} up to order \code{N+2}, which will not only make it impossible to compute the coefficients up to order \code{N} since coefficients of order up to \code{N+2} necessarily appear, but will also fail the equation inference logic, which will discard all these equations since they have coefficients of order strictly greater than \code{N} (see \nameref{sec:PDEScompute} for more details), ultimately resulting in solver failure.
+
+To avoid these problems, always put the series in the expected final state to the left of these operators. Furthermore, \textbf{translating differentiated unknown series will not work}. If really needed, one should try to integrate the equation, and give the \code{compute\_coefficients!} method the additionnal \code{maxIntegrationOrders} argument.
 
 \subsubsection{Constructing PDESeries and LocalizedPDESeries}
 
@@ -809,6 +851,7 @@ The operations +, -, / and multiplication by a scalar for \code{SymbolicSeries} 
 We present here how translation of a series in case one tries to do an operation between two series that do not have the same centers happen, and how multiplication of two series is implemented
 
 \subsubsection{Translation of a SymbolicSeries}
+\label{sec:translate}
 
 For the sake of simplicity, let us focus on translation of a series of one variable:
 

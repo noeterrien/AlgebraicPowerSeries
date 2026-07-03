@@ -982,15 +982,17 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
         end
     end
 
-    if range_idx == 0 # ranges is empty
-        res_center = []
-        for (new_c, c) in zip(new_center, s.center)
-            if new_c == :unspecified
-                push!(res_center, c)
-            else
-                push!(res_center, new_c)
-            end
+    
+    res_center = []
+    for (new_c, c) in zip(new_center, s.center)
+        if new_c == :unspecified
+            push!(res_center, c)
+        else
+            push!(res_center, new_c)
         end
+    end
+
+    if range_idx == 0 # ranges is empty
         return SymbolicSeries(s.ref, res_center, s.get_selfseries_coefficients)
     end
 
@@ -1019,6 +1021,8 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
     op = MultilinearSeriesOperation(v -> +(v...), arg, [generate_index_list(D); :∞], ranges)
 
     function get_selfseries_coefficients(I::Vararg{Int}; N=nothing)
+        @show (I, N)
+
         res = Set()
         
         ranges = []
@@ -1045,14 +1049,62 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
 
     end
 
-    SymbolicSeries(op, new_center, get_selfseries_coefficients)
+    SymbolicSeries(op, res_center, get_selfseries_coefficients)
+end
+
+"""
+    merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
+
+    Make s1 and s2 have the same centers.
+
+    ###Input
+
+    - `s1::SymbolicSeries{D}` -- a SymbolicSeries of D variables
+    - `s2::SymbolicSeries{D}` -- a SymbolicSeries of D variables
+
+    ###Output
+
+    new_s1, new_s2 -- two new SymbolicSeries that have the same center and behave exactly
+    like s1 and s2 when evaluated numerically
+
+    ###Notes
+
+    The way the "center merging" operation is handled is not symetric: First, the center
+    components that are specified in one of the series but not the other are transmitted
+    to the other series. Then, if necessary, s2 is translated so that its center matches
+    s1.
+"""
+function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
+
+    new_center1, new_center2 = [], []
+    for (c1, c2) in zip(s1.center, s2.center)
+        
+        push!(new_center1, c1 == :unspecified ? c2 : c1)
+        push!(new_center2, c2 == :unspecified ? c1 : c2)
+
+    end
+
+    new_s1 = SymbolicSeries(s1.ref, new_center1, s1.get_selfseries_coefficients)
+    new_s2 = SymbolicSeries(s2.ref, new_center2, s2.get_selfseries_coefficients)
+
+    if isequal(new_center1, new_center2) 
+        (new_s1, new_s2)
+    else
+        @warn("A series had to be translated from center $new_center2 to $new_center1. \
+              This implies you will have to use LocalizedPDESeries and may fail when
+              differential operators appear in the equation. \
+              You may be able to avoid this translation by ensuring that the \
+              series with the resulting center is the left term of every operatrors. \
+              Please read the docs for more details")
+        (new_s1, translate(new_s2, new_center1))
+    end
+
 end
 
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        new_s2 = translate(s2, s1.center)
-        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        new_s1, new_s2 = merge_centers(s1, s2)
         return new_s1 + new_s2
     end
 
@@ -1079,8 +1131,7 @@ Base.:+(c::SymbolicSeries{0}, s::SymbolicSeries) = s+c
 function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        new_s2 = translate(s2, s1.center)
-        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        new_s1, new_s2 = merge_centers(s1, s2)
         return new_s1 - new_s2
     end
 
@@ -1146,8 +1197,7 @@ end
 function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     
     if !isequal(s1.center, s2.center)
-        new_s2 = translate(s2, s1.center)
-        new_s1 = translate(s1, new_s2.center) # handle unspecified components of s1.center
+        new_s1, new_s2 = merge_centers(s1, s2)
         return new_s1 * new_s2
     end
 
@@ -1417,16 +1467,24 @@ Base.zero(ess::EvaluatedSymbolicSeries) = Base.zero(ess.series)(ess.variables...
 """
 function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     
+    
+
+    
     old_vars_idx = Dict([v => i for (i,v) in enumerate(s.variables)])
     new_vars_idx = Dict([v => i for (i,v) in enumerate(new_vars)])
 
-    new_center = s.series.center[[old_vars_idx[v] for v in new_vars]]
+    
 
-    op = NlinearSeriesOperation(v -> s[v[[new_vars_idx[var] for var in s.variables]]..., N=v[end]], 
+    new_center = s.series.center[[old_vars_idx[v] for v in new_vars]]
+    
+    perm = [new_vars_idx[var] for var in s.variables]
+
+
+    op = NlinearSeriesOperation(v -> s[v[perm]..., N=v[end]], 
                                 [generate_index_list(D); :∞])
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-        s.series.get_selfseries_coefficients(I[[new_vars_idx[var] for var in s.variables]]..., N=N)
+        s.series.get_selfseries_coefficients(I[perm]..., N=N)
 
     SymbolicSeries(op, new_center, get_selfseries_coefficients)(new_vars...)
 end
@@ -1688,45 +1746,21 @@ get_nbr_vars(::SymbolicSeriesEquation{D}) where D = D
 function SymbolicSeriesEquation(LHS::Union{EvaluatedSymbolicSeries{D1}, Number}, 
                                 RHS::Union{EvaluatedSymbolicSeries{D2}, Number}) where {D1, D2}
     if LHS isa EvaluatedSymbolicSeries && RHS isa EvaluatedSymbolicSeries
-        variables_set = Set(LHS.variables) ∪ Set(RHS.variables)
-        variables = [variables_set...]
-        D = length(variables)
-
-        # create resulting variables
-        var_idx = Dict([v => i for (i,v) in enumerate(variables)])
-        index = generate_index_list(D)
-
-        # create resulting center
-        LHS_var_idx = Dict([v => i for (i,v) in enumerate(LHS.variables)])
-        RHS_var_idx = Dict([v => i for (i,v) in enumerate(RHS.variables)])
-        new_center1, new_center2 = [], []
-        for v in variables
-            if v ∉ keys(RHS_var_idx) || RHS_var_idx[v] == :unspecified
-                push!(new_center1, LHS.series.center[LHS_var_idx[v]])
-                push!(new_center2, LHS.series.center[LHS_var_idx[v]])
-            elseif v ∉ keys(LHS_var_idx) || LHS_var_idx[v] == :unspecified
-                push!(new_center1, RHS.series.center[RHS_var_idx[v]])
-                push!(new_center2, RHS.series.center[RHS_var_idx[v]])
-            else
-                push!(new_center1, LHS.series.center[LHS_var_idx[v]])
-                push!(new_center2, RHS.series.center[RHS_var_idx[v]])
-            end
-        end
-
-        # swap indices to match array of resulting indices
-        swap1 = NlinearSeriesOperation(index -> LHS.series[[index[var_idx[v]] for v in LHS.variables]...,N=index[end]], [index; :∞])
-        get_selfseries_coefficients1(index::Vararg{Int}; N=nothing) = LHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in LHS.variables]...; N)
-        new_LHSseries = SymbolicSeries(swap1, new_center1, get_selfseries_coefficients1)
-
-        swap2 = NlinearSeriesOperation(index -> RHS.series[[index[var_idx[v]] for v in RHS.variables]...,N=index[end]], [index; :∞])
-        get_selfseries_coefficients2(index::Vararg{Int}; N=nothing) = RHS.series.get_selfseries_coefficients([index[var_idx[v]] for v in RHS.variables]...; N)
-        new_RHSseries = SymbolicSeries(swap2, new_center2, get_selfseries_coefficients2)
         
-        if isequal(new_center1, new_center2)
-            SymbolicSeriesEquation(new_LHSseries, new_RHSseries)
+
+        if isequal(LHS.variables, RHS.variables)
+            if isequal(LHS.series.center, RHS.series.center)
+                SymbolicSeriesEquation(LHS.series, RHS.series)
+            else
+                new_LHS, new_RHS = merge_centers(LHS.series, RHS.series)
+                SymbolicSeriesEquation(new_LHS, new_RHS)
+            end
+        elseif isequal(Set(LHS.variables), Set(RHS.variables))
+            SymbolicSeriesEquation(LHS, swap_variables(RHS, LHS.variables))
         else
-            SymbolicSeriesEquation(new_LHSseries, translate(new_RHSseries, new_center1))
+            SymbolicSeriesEquation(union_variables(LHS, RHS.variables), union_variables(RHS, LHS.variables))
         end
+
     else
         SymbolicSeriesEquation(LHS isa EvaluatedSymbolicSeries ? LHS.series : SymbolicSeries{D2}(LHS), 
                                RHS isa EvaluatedSymbolicSeries ? RHS.series : SymbolicSeries{D1}(RHS))
@@ -1747,14 +1781,14 @@ getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}; N=nothing) where D = 
     Retrieves all SeriesCoefficients that refer to :self series in the equation at a given 
     index I. The output is a Set{SeriesCoefficient}
 """
-function get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D}, 
-                                              I::Vararg{Int, D}; 
+function get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D},
+                                              I::Vararg{Int, D};
                                               N=nothing
-                                              )::Set{SeriesCoefficient} where D
-    (eq.LHS isa SymbolicSeries ? eq.LHS.get_selfseries_coefficients(I..., N=N) : Set()) ∪
-    (eq.RHS isa SymbolicSeries ? eq.RHS.get_selfseries_coefficients(I..., N=N) : Set())
-end
+                                              )::Set{SeriesCoefficient} where D 
 
+    eq.LHS.get_selfseries_coefficients(I..., N=N) ∪ eq.RHS.get_selfseries_coefficients(I..., N=N)
+
+end
 ################################### PDESeries ####################################
 
 """
@@ -1871,7 +1905,6 @@ function PDES_should_discard_new_equation(unknowns::Set{<:SeriesCoefficient}, N:
     isempty(unknowns) && return true
 
     for uk in unknowns
-        println("coeff : $uk, order : $(getOrder(uk))")
         getOrder(uk) > N && return true
     end
 
@@ -1937,8 +1970,8 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
                     push!(eqs, getNum(eq, idx...))
                     push!(ps.used_equations[eq_idx], idx)
                 elseif verbose ≥ 3
-                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...))")
-                    println("involved coefficients were $new_unknowns")
+                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...)), \n
+                             involved coefficients were $new_unknowns")
                 end
             end
         end
@@ -2133,7 +2166,8 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
             if !(PDES_should_discard_new_equation(new_unknowns, N))
                 push!(eqs, getNum(eq, idx...; N=N))
             elseif verbose ≥ 3
-                println("discarded for fullsym idx [$idx] : $(getNum(eq, idx...; N=N))")
+                println("discarded with fullsym index [$idx] : $(getNum(eq, idx...; N=N)))")
+                println("involved coefficients were $new_unknowns")
             end
         end
     end
