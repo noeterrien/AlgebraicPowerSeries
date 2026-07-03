@@ -4,11 +4,11 @@
 using Markdown
 using InteractiveUtils
 
-# # ╔═╡ 96582742-0d69-47a1-bce6-5672385e4bb7
-# begin
-# 	import Pkg;
-# 	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
-# end
+# ╔═╡ 96582742-0d69-47a1-bce6-5672385e4bb7
+begin
+	import Pkg;
+	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
+end
 
 # ╔═╡ c481d149-fcb1-4e31-96ed-64abfd3704ea
 using GLMakie
@@ -50,7 +50,7 @@ md"""
 y_range = 0:0.01:1
 
 # ╔═╡ 1cdd8737-6f26-468c-b7ce-6a0802186b76
-centers = [[0,0], [0,1], [1,1]]
+centers = [[0,0], [1,0], [1,1]]
 
 # ╔═╡ 08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 c = 3; nothing
@@ -62,10 +62,10 @@ c = 3; nothing
 λ_expr = √(0.5 + x^2)
 
 # ╔═╡ 29ed4087-c9d0-47a8-9af6-cc7a70e1d039
-orders1 = [4] #, 8, 15, 25, 50]
+orders1 = [4, 8, 15, 25, 50, 100]
 
 # ╔═╡ d44ad123-66c1-4c97-b8e0-1c705b72073b
-orders2 = [4] #, 8, 15, 25]
+orders2 = [4, 8, 15, 25, 50]
 
 # ╔═╡ 56c156b0-014e-43ff-b405-5d24d724dcad
 maxOrder = maximum(orders1)
@@ -94,9 +94,12 @@ function create_PDESeries(center, λ; loc=false)
 	unknown = selfseries_symbols()
 	K = SymbolicSeries(unknown, center)
 
+	println()
+	println("creating PDESeries with center $center")
+
 	BC1 = K(x,0) ~ 0
 	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ(x) + c, 0, x, x)
-	PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ(y)+c)/ε * K(x,y) # ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ(y)+c)/ε * K(x,y)
+	PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ K(x,y) * (λ(y)+c)/ε
 
 	if loc
 		LocalizedPDESeries{Float64}(:K, [x,y], center, [BC1, BC2, PDE], unknown)
@@ -134,105 +137,105 @@ md"""
 # # PDESeries expanded at (0,0) with λ expanded around 0
 # """
 
-# # ╔═╡ 8909a420-10e8-4f34-8adb-71713d06d3fa
-# begin 
-# 	K1_ps = create_PDESeries(centers[1], λ0)
-# 	compute_coefficients!(K1_ps, maxOrder)
-# end
+# ╔═╡ 8909a420-10e8-4f34-8adb-71713d06d3fa
+begin 
+	K1_ps = create_PDESeries(centers[1], λ0)
+	compute_coefficients!(K1_ps, maxOrder)
+end
 
-# # ╔═╡ 488cd860-2322-4f16-865b-cf43e4b4715d
-# # plot result
-# let
-# 	Ks = []
-# 	for order in orders1
-# 		K, = build_matrix_elt(K1_ps, order)
-# 		boundary_K(y) = K(1,y)
-# 		push!(Ks, boundary_K)
-# 	end
+# ╔═╡ 488cd860-2322-4f16-865b-cf43e4b4715d
+# plot result
+let
+	Ks = []
+	for order in orders1
+		K, = build_matrix_elt(K1_ps, order)
+		boundary_K(y) = K(1,y)
+		push!(Ks, boundary_K)
+	end
 
-# 	for (order, f) in zip(orders1, Ks)
-# 		lines!(axs[1], y_range, f.(y_range); label="N = $order")
-# 	end
-# end
+	for (order, f) in zip(orders1, Ks)
+		lines!(axs[1], y_range, f.(y_range); label="N = $order")
+	end
+end
 
-# # ╔═╡ dd712221-2109-4f98-bd3d-c0a1353ab50b
-# # add legend
-# fig[1,2] = Legend(fig, axs[1], "orders", framevisible=false)
+# ╔═╡ dd712221-2109-4f98-bd3d-c0a1353ab50b
+# add legend
+fig[1,2] = Legend(fig, axs[1], "orders", framevisible=false)
 
-# # ╔═╡ b748b0e1-b049-48d8-8ab3-453b74e4db6b
-# display(fig)
+# ╔═╡ b748b0e1-b049-48d8-8ab3-453b74e4db6b
+display(fig)
 
-# # ╔═╡ 54e051f4-a7e3-4177-a45a-8ba46a46cdf1
-# md"""
-# # Translated Series with K expanded around (0,0) and λ around 0, then K translated to (1,0)
-# """
+# ╔═╡ 54e051f4-a7e3-4177-a45a-8ba46a46cdf1
+md"""
+# Translated Series with K expanded around (0,0) and λ around 0, then K translated to (1,0)
+"""
 
-# # ╔═╡ 2c51c206-4a9a-411e-9676-7ac66201eee5
-# md"""
-# ## trunc_order = order
-# """
+# ╔═╡ 2c51c206-4a9a-411e-9676-7ac66201eee5
+md"""
+## trunc_order = order
+"""
 
-# # ╔═╡ f9094c92-2210-4ba7-9884-0888a3c147f6
-# K2_ps = TranslatedSeries(:K2, K1_ps, [1,0])
+# ╔═╡ f9094c92-2210-4ba7-9884-0888a3c147f6
+K2_ps = TranslatedSeries(:K2, K1_ps, [1,0])
 
-# # ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
-# # compute coefficients and resulting polynomials
-# begin
-# 	Ks2 = []
-# 	for order in orders2
+# ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
+# compute coefficients and resulting polynomials
+begin
+	Ks2 = []
+	for order in orders2
 		
-# 		compute_coefficients!(K2_ps, order)
-# 		K2, = build_matrix_elt(K2_ps, order)
-# 		boundary_K2(y) = K2(1,y)				
-# 		push!(Ks2, boundary_K2)
+		compute_coefficients!(K2_ps, order)
+		K2, = build_matrix_elt(K2_ps, order)
+		boundary_K2(y) = K2(1,y)				
+		push!(Ks2, boundary_K2)
 
-# 	end
-# end
+	end
+end
 
-# # ╔═╡ b131bcd4-ae1b-4752-9f0e-7efee2b00590
-# # plot result
-# for (order, f) in zip(orders2, Ks2)
-# 	lines!(axs[2], y_range, f.(y_range); label="N = $order")
-# end
+# ╔═╡ b131bcd4-ae1b-4752-9f0e-7efee2b00590
+# plot result
+for (order, f) in zip(orders2, Ks2)
+	lines!(axs[2], y_range, f.(y_range); label="N = $order")
+end
 
-# # ╔═╡ eee0829b-3d39-4374-9378-44a6206bbeed
-# # legend
-# fig[2,2] = Legend(fig, axs[2], "orders", framevisible=false)
+# ╔═╡ eee0829b-3d39-4374-9378-44a6206bbeed
+# legend
+fig[2,2] = Legend(fig, axs[2], "orders", framevisible=false)
 
-# # ╔═╡ 7ffc5a02-b91a-426e-b4b6-eb82452c4f77
-# display(fig)
+# ╔═╡ 7ffc5a02-b91a-426e-b4b6-eb82452c4f77
+display(fig)
 
-# # ╔═╡ 9f958e1d-b0d8-4129-a01e-aa1ff7c1f175
-# md"""
-# ## trunc_order=maxOrder1
-# """
+# ╔═╡ 9f958e1d-b0d8-4129-a01e-aa1ff7c1f175
+md"""
+## trunc_order=maxOrder1
+"""
 
-# # ╔═╡ b89eb4f3-2e91-44fe-8fba-144d1e316cea
-# # compute coefficients and resulting polynomials
-# begin
-# 	Ks3 = []
-# 	for order in orders2
+# ╔═╡ b89eb4f3-2e91-44fe-8fba-144d1e316cea
+# compute coefficients and resulting polynomials
+begin
+	Ks3 = []
+	for order in orders2
 		
-# 		compute_coefficients!(K2_ps, order; trunc_order=maxOrder)
-# 		K3, = build_matrix_elt(K2_ps, order)
-# 		boundary_K3(y) = K3(1,y)				
-# 		push!(Ks3, boundary_K3)
+		compute_coefficients!(K2_ps, order; trunc_order=maxOrder)
+		K3, = build_matrix_elt(K2_ps, order)
+		boundary_K3(y) = K3(1,y)				
+		push!(Ks3, boundary_K3)
 
-# 	end
-# end
+	end
+end
 
-# # ╔═╡ bd35c2bc-247c-40fe-8f91-1786e1cfc8dd
-# # plot result
-# for (order, f) in zip(orders2, Ks3)
-# 	lines!(axs[3], y_range, f.(y_range); label="N = $order")
-# end
+# ╔═╡ bd35c2bc-247c-40fe-8f91-1786e1cfc8dd
+# plot result
+for (order, f) in zip(orders2, Ks3)
+	lines!(axs[3], y_range, f.(y_range); label="N = $order")
+end
 
-# # ╔═╡ 0727815c-d1c0-4170-a977-5669f5dd7c63
-# # legend
-# fig[3,2] = Legend(fig, axs[3], "orders", framevisible=false)
+# ╔═╡ 0727815c-d1c0-4170-a977-5669f5dd7c63
+# legend
+fig[3,2] = Legend(fig, axs[3], "orders", framevisible=false)
 
-# # ╔═╡ ce14727c-24fe-48cf-95c5-c0a5fce8dc4d
-# display(fig)
+# ╔═╡ ce14727c-24fe-48cf-95c5-c0a5fce8dc4d
+display(fig)
 
 # ╔═╡ 18e561b9-4605-4ea0-983f-383c93cbf26f
 md"""
@@ -354,5 +357,5 @@ save("Fixing divergence in 1-D reaction diffusion with space varying reaction.pn
 # ╠═0dc56dfc-be90-4123-9452-f0f67cc5f819
 # ╟─92b4a667-22ac-46ac-970a-b0443eed6c6b
 # ╠═af006b90-6969-4636-9a88-442cfe8b4e08
-# ╠═e424b71c-2535-44ef-a67d-36ebbd9864d8
+# ╟─e424b71c-2535-44ef-a67d-36ebbd9864d8
 # ╠═fa5120e4-c62d-48fd-9005-1b4d78afae34
