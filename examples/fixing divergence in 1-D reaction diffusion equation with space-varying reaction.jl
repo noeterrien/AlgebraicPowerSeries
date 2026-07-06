@@ -50,7 +50,7 @@ md"""
 y_range = 0:0.01:1
 
 # ╔═╡ 1cdd8737-6f26-468c-b7ce-6a0802186b76
-centers = [[0,0], [1,0], [1,1]]
+centers = [[1,0], [1,1], [0,0]]
 
 # ╔═╡ 08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 c = 3; nothing
@@ -62,10 +62,10 @@ c = 3; nothing
 λ_expr = √(0.5 + x^2)
 
 # ╔═╡ 29ed4087-c9d0-47a8-9af6-cc7a70e1d039
-orders1 = [4, 8, 15, 25, 50, 100]
+orders1 = [2, 4, 8, 50]
 
 # ╔═╡ d44ad123-66c1-4c97-b8e0-1c705b72073b
-orders2 = [4, 8, 15, 25, 50]
+orders2 = [2, 4, 8, 50]
 
 # ╔═╡ 56c156b0-014e-43ff-b405-5d24d724dcad
 maxOrder = maximum(orders1)
@@ -118,8 +118,8 @@ fig = Figure(); nothing
 
 # ╔═╡ 014d214e-4a5e-4836-a068-dac223bcf6e5
 titles = ["K at (0,0), λ at 0 (using PDESeries)",
-		  "K at (0,0), λ at 0, then K translated to (1,0) with trunc_order=50",
-		  "K at (0,0), λ at 0, then K translated to (1,0) with trunc_order=100",
+		  "K at (0,0), λ at 0, then K translated to (1,0)",
+		  "K at (0,0), λ at 0, then K translated to (1,0) with trunc_order=$maxOrder",
 		  "K at (1,0), λ at 0",
 		  "K at (1,1), λ at 0",
 		  "K at (0,0), λ at 0 (using LocalizedPDESeries)", 
@@ -139,8 +139,8 @@ md"""
 
 # ╔═╡ 8909a420-10e8-4f34-8adb-71713d06d3fa
 begin 
-	K1_ps = create_PDESeries(centers[1], λ0)
-	compute_coefficients!(K1_ps, maxOrder)
+	K1_ps = create_PDESeries(centers[3], λ0)
+	compute_coefficients!(K1_ps, maxOrder; verbose=2)
 end
 
 # ╔═╡ 488cd860-2322-4f16-865b-cf43e4b4715d
@@ -176,7 +176,7 @@ md"""
 """
 
 # ╔═╡ f9094c92-2210-4ba7-9884-0888a3c147f6
-K2_ps = TranslatedSeries(:K2, K1_ps, [1,0])
+K2_ps = TranslatedSeries(:K2, K1_ps, centers[1])
 
 # ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
 # compute coefficients and resulting polynomials
@@ -254,7 +254,7 @@ function plot_locPDESeries(pdeseries, ax, leg_idx; show=false)
 	Ks4 = []
 	for order in orders2
 		
-		compute_coefficients!(pdeseries, order; verbose=3)
+		compute_coefficients!(pdeseries, order; verbose=2)
 		K4, = build_matrix_elt(pdeseries, order)
 		boundary_K4(y) = K4(1,y)				
 		push!(Ks4, boundary_K4)
@@ -282,6 +282,7 @@ md"""
 
 # ╔═╡ 0dc56dfc-be90-4123-9452-f0f67cc5f819
 for (c, ax, leg_idx) in zip(centers, axs[4:6], [(1,4),(2,4),(3,4)])
+	println("computing LocalizedPDESeries centered around $c")
 	pdeseries = create_PDESeries(c, λ0; loc=true)
 	plot_locPDESeries(pdeseries, ax, leg_idx; show=true)
 end
@@ -293,6 +294,7 @@ md"""
 
 # ╔═╡ af006b90-6969-4636-9a88-442cfe8b4e08
 for (c, ax, leg_idx) in zip(centers, axs[7:9], [(1,6),(2,6),(3,6)])
+	println("computing LocalizedPDESeries centered around $c")
 	pdeseries = create_PDESeries(c, λ1; loc=true)
 	plot_locPDESeries(pdeseries, ax, leg_idx; show=true)
 end
@@ -304,6 +306,7 @@ md"""
 
 # ╔═╡ fa5120e4-c62d-48fd-9005-1b4d78afae34
 save("Fixing divergence in 1-D reaction diffusion with space varying reaction.png", fig; px_per_unit=4)
+
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
