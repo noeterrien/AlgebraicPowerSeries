@@ -1197,7 +1197,7 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                     @warn("A series depending on the :self series 
                            had to be translated from center $new_center1 to $new_center2. \
                            This implies you will have to use LocalizedPDESeries and can
-                           increase the computational complexity of trying to compute the coefficients\
+                           increase the computational complexity of trying to compute the coefficients.\
                            You may be able to avoid this translation by ensuring that the \
                            series with the resulting center is the left term of every operators. \
                            Please read the docs for more details")
@@ -1206,7 +1206,7 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                     @warn("A series depending on the :self series 
                            had to be translated from center $new_center2 to $new_center1. \
                            This implies you will have to use LocalizedPDESeries and can
-                           increase the computational complexity of trying to compute the coefficients\
+                           increase the computational complexity of trying to compute the coefficients.\
                            You may be able to avoid this translation by ensuring that the \
                            series with the resulting center is the left term of every operators. \
                            Please read the docs for more details")
@@ -1214,7 +1214,7 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                 end
             else
                 @info("A series had to be translated from center $new_center1 to $new_center2. \
-                   This implies you will have to use LocalizedPDESeries \
+                   This implies you will have to use LocalizedPDESeries. \
                    You may be able to avoid this translation by ensuring that the \
                    series with the resulting center is the left term of every operators. \
                    Please read the docs for more details")
@@ -1222,7 +1222,7 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
             end
         else
             @info("A series had to be translated from center $new_center2 to $new_center1. \
-                   This implies you will have to use LocalizedPDESeries \
+                   This implies you will have to use LocalizedPDESeries. \
                    You may be able to avoid this translation by ensuring that the \
                    series with the resulting center is the left term of every operators. \
                    Please read the docs for more details")

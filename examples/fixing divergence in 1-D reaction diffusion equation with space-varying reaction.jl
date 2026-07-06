@@ -84,6 +84,8 @@ begin
 	λ1 = SymbolicSeries(λ1_ps)
 end
 
+#redirect_stdio(stdout="stdout.txt", stderr="stderr.txt") do
+
 # ╔═╡ 9d45f916-8031-4208-b7ba-03c14020c293
 md"""
 # A useful function
@@ -179,6 +181,8 @@ md"""
 K2_ps = TranslatedSeries(:K2, K1_ps, centers[1])
 
 # ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
+# ╠═╡ disabled = true
+#=╠═╡
 # compute coefficients and resulting polynomials
 begin
 	Ks2 = []
@@ -191,19 +195,29 @@ begin
 
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ b131bcd4-ae1b-4752-9f0e-7efee2b00590
+# ╠═╡ disabled = true
+#=╠═╡
 # plot result
 for (order, f) in zip(orders2, Ks2)
 	lines!(axs[2], y_range, f.(y_range); label="N = $order")
 end
+  ╠═╡ =#
 
 # ╔═╡ eee0829b-3d39-4374-9378-44a6206bbeed
+# ╠═╡ disabled = true
+#=╠═╡
 # legend
 fig[2,2] = Legend(fig, axs[2], "orders", framevisible=false)
+  ╠═╡ =#
 
 # ╔═╡ 7ffc5a02-b91a-426e-b4b6-eb82452c4f77
+# ╠═╡ disabled = true
+#=╠═╡
 display(fig)
+  ╠═╡ =#
 
 # ╔═╡ 9f958e1d-b0d8-4129-a01e-aa1ff7c1f175
 md"""
@@ -307,6 +321,7 @@ md"""
 # ╔═╡ fa5120e4-c62d-48fd-9005-1b4d78afae34
 save("Fixing divergence in 1-D reaction diffusion with space varying reaction.png", fig; px_per_unit=4)
 
+#end
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
