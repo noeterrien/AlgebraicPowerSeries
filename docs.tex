@@ -155,8 +155,15 @@ These examples were used to assess the reliability of the module by reproducing 
 
 \subsection{Benchmarks}
 
-%TODO :
-Some benchmarks will be proposed in the future to compare different solvers for PDESeries that are hardware-dependent or trying to use sparsity
+One can test which of LinearSolve' solvers is the fastest for a specific problem using the benchmarks proposed in the "benchmark/" folder. It was designed for windows/linux OS equipped with nvidia CUDA-available graphic cards, so the solvers to try might need to be adapted depending on the hardware. For mac users, a specific solver also exists (see ~\cite{LinearSolveSolvers})
+
+There are two benchmarks that can be used to test problems requiring LocalizedPDESeries (the hardest ones):
+\begin{itemize}
+    \item "benchmark\_LocalizedPDESeries.jl" -- used for complete benchmarking using BenchmarkTools' \code{@btime} macro
+    \item "quickbenchmark\_LocalizedPDESeries.jl" -- which does not use the \code{@btime} macro, making it possibly a lot faster but also less precise. Can be used to test the solvers up to high orders
+\end{itemize}
+
+Some solvers from LinearSolve can't be used directly (solvers using sparsity or CUDA cores) so parser were written for them in the "custom\_solvers.jl" file
 
 \section{User guide}
 
@@ -941,6 +948,9 @@ Jiří Lebl, ``Tasty Bits of Several Complex Variables, a whirlwind tour of the 
 
 \bibitem{taylorseriesmodule}
 Luis Benet, David P. Sanders, "A Julia package for Taylor polynomial expansions in one or more independent variables.", \url{https://github.com/JuliaDiff/TaylorSeries.jl}
+
+\bibitem{LinearSolveSolvers}
+LinearSolve: Linear System Solvers, \url{https://docs.sciml.ai/LinearSolve/stable/solvers/solvers/}
 
 \end{thebibliography}
 
