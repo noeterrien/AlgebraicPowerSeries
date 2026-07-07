@@ -13,10 +13,10 @@ save_to = "quickbenchmark_LocalizedPDESeries.txt"
 iszero_tol = 1e-15
 
 compileOrder = 3 # used to compile the required functions before measuring the time needed
-maxOrder = 5
+maxOrder = 50
 
 # The solvers to test
-solvers = [LS.QRFactorization()] #=, LS.QRFactorization(), 
+solvers = [LS.QRFactorization(), LS.QRFactorization(), 
            julia_default, julia_default,
            LS.RFLUFactorization, LS.RFLUFactorization,
            LS.OpenBLASLUFactorization, LS.OpenBLASLUFactorization,
@@ -35,10 +35,10 @@ solvers = [LS.QRFactorization()] #=, LS.QRFactorization(),
            sparse_CPUKrylovJL_CG,
            sparse_CPUKrylovJL_GMRES,
            sparse_CUDAKrylovJL_CG, sparse_CUDAKrylovJL_CG,
-           sparse_CUDAKrylovJL_GMRES, sparse_CUDAKrylovJL_GMRES] =#
+           sparse_CUDAKrylovJL_GMRES, sparse_CUDAKrylovJL_GMRES]
 
 # The name of each solver
-solver_names = ["QRFactorization"] #=, "QRFactorization", 
+solver_names = ["QRFactorization", "QRFactorization", 
                 "julia default", "julia default",
                 "RFLUFactorization", "RFLUFactorization",
                 "OpenBLASLUFactorization", "OpenBLASLUFactorization",
@@ -57,10 +57,10 @@ solver_names = ["QRFactorization"] #=, "QRFactorization",
                 "sparse CPUKrylovJL_CG",
                 "sparse CPUKrylovJL_GMRES",
                 "sparse CUDAKrylovJL_CG", "sparse CUDAKrylovJL_CG",
-                "sparse CUDAKrylovJL_GMRES", "sparse CUDAKrylovJL_GMRES"] =#
+                "sparse CUDAKrylovJL_GMRES", "sparse CUDAKrylovJL_GMRES"]
 
 # The type associated with each solver
-types = [Float64] #=, Float32, 
+types = [Float64, Float32, 
          Float64, Float32,
          Float64, Float32,
          Float64, Float32,
@@ -79,7 +79,7 @@ types = [Float64] #=, Float32,
          Float64,
          Float64,
          Float64, Float32,
-         Float64, Float32] =#
+         Float64, Float32]
 
 ####################################### The problem #######################################
 
@@ -114,6 +114,9 @@ c = 3
 """
 function benchmark_with(T::Type, solver, solver_name::String)
 
+
+    ####### replace this part with your own problem #######
+
     λ_ps = TaylorExpansionSeries{T}(:λ, [x], [√(0.5 + x^2)], [center[2]])
     compute_coefficients!(λ_ps, maxOrder)
     λ = SymbolicSeries(λ_ps)
@@ -127,6 +130,9 @@ function benchmark_with(T::Type, solver, solver_name::String)
 
     K_ps = LocalizedPDESeries{T}(:K, [x,y], center, [BC1, BC2, PDE], unknown)
     
+    #######################################################
+
+
     # compile everything
     compute_coefficients!(K_ps, compileOrder; solver=solver)
 

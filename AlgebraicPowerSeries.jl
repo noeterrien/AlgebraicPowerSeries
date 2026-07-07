@@ -169,7 +169,7 @@ function SeriesCoefficient(ps::Union{AbstractPowerSeries{D}, Symbol},
     else
         u_sym = Symbol("$(ps.seriesID)$index$indices") # unique id
     end
-    u_sym, = @variables $u_sym
+    u_sym, = Symbolics.variable(u_sym)
 
     SeriesCoefficient(ps, sym, u_sym, indices, index)
 end
@@ -235,11 +235,11 @@ function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg{Int})
     else
         if sss.ps == :self
             sym = Symbol("self$(sss.scalar_idx)$vI")
-            sym, = @variables $sym
+            sym, = Symbolics.variable(sym)
             sss.coefficients[vI] = SeriesCoefficient(:self, sym, vI, sss.scalar_idx)
         elseif sss.ps isa PowerSeries
             sym = Symbol("$(sss.ps.seriesID)$(sss.scalar_idx)$vI")
-            sym, = @variables $sym
+            sym, = Symbolics.variable(sym)
             sss.coefficients[vI] = SeriesCoefficient(sss.ps, sym, vI, sss.scalar_idx)
         end
         sss.coefficients[vI]
@@ -1337,7 +1337,7 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                                                         s2[(params[1:D].-I)..., N=params[end]]
                                                        ])
 
-    op = MultilinearSeriesOperation(v -> +(v...), arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
+    op = MultilinearSeriesOperation(v -> sum(v), arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
 
 
 
@@ -1442,7 +1442,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                               idx, 
                                               params[x_idx:end-1]...,
                                               N=params[end]]
-                    op = MultilinearSeriesOperation(v -> +(v...), arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))])
+                    op = MultilinearSeriesOperation(v -> sum(v), arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))])
 
                     function get_selfseries_coefficients1(idcs::Vararg{Int}; N=nothing)
                         res = Set()
@@ -1470,7 +1470,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                 
                 else # the center components do not match => LocalizedPDESeries
 
-                    arg2(idx::Int; params) = NlinearSeriesOperation(v -> +(v...), 
+                    arg2(idx::Int; params) = NlinearSeriesOperation(v -> sum(v), 
                                                [NlinearSeriesOperation(v -> v[1]*v[2]*v[3],
                                                 [dynamic_binomial(idx, m),
                                                  s[
@@ -1485,7 +1485,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                                )                                                
                                                for m in 0:min(params[other_x],idx)
                                                ])
-                    op = MultilinearSeriesOperation(v -> +(v...), 
+                    op = MultilinearSeriesOperation(v -> sum(v), 
                                                     arg2, 
                                                     [generate_index_list(l-1);:∞], 
                                                     [(0,:∞)])
@@ -1545,7 +1545,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                                             (x-s.center[x_idx])^idx
                                                            ])
 
-                op = MultilinearSeriesOperation(v -> +(v...), arg4, [generate_index_list(l-1);:∞], [(0,:∞)])
+                op = MultilinearSeriesOperation(v -> sum(v), arg4, [generate_index_list(l-1);:∞], [(0,:∞)])
 
                 function get_selfseries_coefficients4(idcs::Vararg{Int}; N)
                     res = Set()

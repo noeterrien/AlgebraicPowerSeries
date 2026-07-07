@@ -114,6 +114,8 @@ c = 3
 """
 function benchmark_with(T::Type, solver, solver_name::String)
 
+    ####### replace this part with your own problem #######
+
     λ_ps = TaylorExpansionSeries{T}(:λ, [x], [√(0.5 + x^2)], [center[2]])
     compute_coefficients!(λ_ps, maxOrder)
     λ = SymbolicSeries(λ_ps)
@@ -127,6 +129,8 @@ function benchmark_with(T::Type, solver, solver_name::String)
 
     K_ps = LocalizedPDESeries{T}(:K, [x,y], center, [BC1, BC2, PDE], unknown)
     
+    #######################################################
+
     print("Benchmark results for solver $solver_name with type $T: ")
     @btime compute_coefficients!($K_ps, $maxOrder; solver=$solver)
     println()

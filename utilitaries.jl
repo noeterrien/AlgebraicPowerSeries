@@ -334,12 +334,12 @@ end
 function extract_affine_transformation(eqs::Vector{Equation}, vars::Vector{Num}, T::Type)
     exprs = [eq.lhs-eq.rhs for eq in eqs]
 
-    A_sym = Symbolics.jacobian(exprs, vars)
-    subst = Dict([v => 0 for v in vars])
-    b_sym = [-Symbolics.substitute(expr, subst) for expr in exprs]
+    A_sym, b_sym, islinear = Symbolics.linear_expansion(exprs, vars)
+    islinear || throw(ArgumentError("System is not affine. This implies your PDE is \
+                                     not linear"))
 
     A = T.(Symbolics.value.(A_sym))
-    b = T.(Symbolics.value.(b_sym))
+    b = T.(-Symbolics.value.(b_sym))
 
     A, b
 end
