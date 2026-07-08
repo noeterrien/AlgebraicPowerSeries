@@ -16,70 +16,31 @@ iszero_tol = 1e-15
 maxOrder = 10
 
 # The solvers to test
-solvers = [LS.QRFactorization(), LS.QRFactorization(), 
+solvers = [QRFactorization, QRFactorization, 
            julia_default, julia_default,
-           LS.RFLUFactorization, LS.RFLUFactorization,
-           LS.OpenBLASLUFactorization, LS.OpenBLASLUFactorization,
-           LS.LUFactorization, LS.LUFactorization,
-           LS.CudaOffloadLUFactorization, LS.CudaOffloadLUFactorization,
-           LS.CudaOffloadQRFactorization, LS.CudaOffloadQRFactorization,
-           CUDAOffload32MixedLUFactorization,
-           sparse_PureKLUFactorization,
-           sparse_UMFPACKFactorization,
+           CudaOffloadQRFactorization, CudaOffloadQRFactorization,
            sparse_SparseColumnPivotedQRFactorization,
            sparse_QRFactorization,
            sparse_ParUFactorization,
-           sparse_MUMPSFactorization,
-           sparse_CUDALUFactorization,
-           sparse_CUSOLVERRFFactorization,
-           sparse_CPUKrylovJL_CG,
-           sparse_CPUKrylovJL_GMRES,
-           sparse_CUDAKrylovJL_CG, sparse_CUDAKrylovJL_CG,
-           sparse_CUDAKrylovJL_GMRES, sparse_CUDAKrylovJL_GMRES]
+           sparse_MUMPSFactorization,]
 
 # The name of each solver
 solver_names = ["QRFactorization", "QRFactorization", 
                 "julia default", "julia default",
-                "RFLUFactorization", "RFLUFactorization",
-                "OpenBLASLUFactorization", "OpenBLASLUFactorization",
-                "LUFactorization", "LUFactorization",
-                "CudaOffloadLUFactorization", "CudaOffloadLUFactorization",
                 "CudaOffloadQRFactorization", "CudaOffloadQRFactorization",
-                "CUDAOffload32MixedLUFactorization",
-                "sparse PureKLUFactorization",
-                "sparse UMFPACKFactorization",
                 "sparse SparseColumnPivotedQRFactorization",
                 "sparse QRFactorization",
                 "sparse ParUFactorization",
-                "sparse MUMPSFactorization",
-                "sparse CUDALUFactorization",
-                "sparse CUSOLVERRFFactorization",
-                "sparse CPUKrylovJL_CG",
-                "sparse CPUKrylovJL_GMRES",
-                "sparse CUDAKrylovJL_CG", "sparse CUDAKrylovJL_CG",
-                "sparse CUDAKrylovJL_GMRES", "sparse CUDAKrylovJL_GMRES"]
+                "sparse MUMPSFactorization",]
 
 # The type associated with each solver
 types = [Float64, Float32, 
          Float64, Float32,
          Float64, Float32,
-         Float64, Float32,
-         Float64, Float32,
-         Float64, Float32,
-         Float64, Float32,
-         Float32,
          Float64,
          Float64,
          Float64,
-         Float64,
-         Float64,
-         Float64,
-         Float32,
-         Float64,
-         Float64,
-         Float64,
-         Float64, Float32,
-         Float64, Float32]
+         Float64]
 
 ####################################### The problem #######################################
 

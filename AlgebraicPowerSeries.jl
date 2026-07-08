@@ -1,7 +1,7 @@
 using Symbolics
 import TaylorSeries
-import LinearSolve as LS
 include("utilitaries.jl")
+include("solvers.jl")
 
 #---------------------------------------------------------------------------------------------------------------------
 abstract type AbstractPowerSeries{D} end
@@ -656,8 +656,8 @@ end
 
     ###Fiels
 
-    - `func` -- The function used to aggregate all the arguments. Should take a vector as
-      input
+    - `aggreg` -- The function used to aggregate all the arguments. Should take two elements
+      as input and make one
     - `arg` -- A function that returns the arguments to be used when called on a number of
       indices xᵢ. arg should return either a SeriesCoefficient, Numbers ... or an operation
       (NlinearSeriesOperation or MultilinearSeriesOperation) on SeriesCoefficients, Numbers 
@@ -670,29 +670,29 @@ end
 
     ###Example
 
-    - `MultilinearSeriesOperation(func, 
+    - `MultilinearSeriesOperation(aggreg, 
                                   arg, 
                                   arg_parameters::Vector
                                   ranges::Vector{Tuple{Any, Any}})` -- default constructor
-    - `MultilinearSeriesOperation(func, 
+    - `MultilinearSeriesOperation(aggreg, 
                                   arg,
                                   ranges::Vector{Tuple{Any, Any}})` -- constructor for 
       MultilinearSeriesOperation with empty arg_parameters
 """
 struct MultilinearSeriesOperation
-    func
+    aggreg
     arg
     arg_parameters::Vector
     ranges::Vector{Tuple{Any, Any}}
 end
 
-MultilinearSeriesOperation(func, arg, ranges::Vector{Tuple{Any, Any}}) = 
-    MultilinearSeriesOperation(func, arg, [], ranges)
+MultilinearSeriesOperation(aggreg, arg, ranges::Vector{Tuple{Any, Any}}) = 
+    MultilinearSeriesOperation(aggreg, arg, [], ranges)
 
 function Base.show(io::IO, op::MultilinearSeriesOperation)
     indices = ["i_$i, " for i in 1:length(op.ranges)]
     ranges_str = ["i_$i in $(r[1]):$(r[2]), " for (i,r) in enumerate(op.ranges)]
-    print(io, "MultilinearSeriesOperation{$(op.func)}(arg($(indices...); params=$(op.arg_parameters)) for $(ranges_str...))")
+    print(io, "MultilinearSeriesOperation{$(op.aggreg)}(arg($(indices...); params=$(op.arg_parameters)) for $(ranges_str...))")
 end
 
 """
@@ -702,16 +702,12 @@ end
     Only works if op is an operation on SymblicSeries coefficients.
 """
 function getSymbolics(op::MultilinearSeriesOperation)::Number
-    to_aggregate = []
     rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
-    if isempty(op.arg_parameters)
-        foreach(x -> push!(to_aggregate, getSymbolics(op.arg(Tuple(x)...))), rngs)
-    else
-        foreach(x -> push!(to_aggregate, 
-                           getSymbolics(op.arg(Tuple(x)...; params=op.arg_parameters))),
-                rngs)
+    res = 0
+    for idcs in rngs
+        res = op.aggreg(res, getSymbolics(op.arg(Tuple(idcs)...; params=op.arg_parameters)))
     end
-    getSymbolics(op.func(to_aggregate))
+    res
 end
 
 """
@@ -724,16 +720,12 @@ end
     numerically
 """
 function getNum(op::MultilinearSeriesOperation)::Number
-    to_aggregate = []
     rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
-    if isempty(op.arg_parameters)
-        foreach(x -> push!(to_aggregate, getNum(op.arg(Tuple(x)...))), rngs)
-    else
-        foreach(x -> push!(to_aggregate, 
-                           getNum(op.arg(Tuple(x)...; params=op.arg_parameters))),
-                rngs)
+    res = 0
+    for idcs in rngs
+        res = op.aggreg(res, getNum(op.arg(Tuple(idcs)...; params=op.arg_parameters)))
     end
-    getNum(op.func(to_aggregate))
+    res
 end
 
 ##############################TruncatedMultilinearSeriesOperation#########################
@@ -778,7 +770,7 @@ TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters::Vector, starts:
 function Base.show(io::IO, op::TruncatedMultilinearSeriesOperation)
     starts = ["i_$i, " for i in 1:length(op.starts)]
     ranges_str = ["i_$i in $(r[1]):+∞, " for (i,r) in enumerate(op.starts)]
-    print(io, "MultilinearSeriesOperation{$(op.func)}(arg($(starts...); params=$(op.arg_parameters)) for $(ranges_str...))")
+    print(io, "TruncatedMultilinearSeriesOperation{$(op.func)}(arg($(starts...); params=$(op.arg_parameters)) for $(ranges_str...))")
 end
 
 """
@@ -973,7 +965,7 @@ function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) whe
         elseif arg isa NlinearSeriesOperation
             NlinearSeriesOperation(arg.func, map(substitution, arg.args))
         elseif arg isa MultilinearSeriesOperation
-            MultilinearSeriesOperation(arg.func, 
+            MultilinearSeriesOperation(arg.aggreg, 
                                arg.arg, 
                                substitution.(arg.arg_parameters), 
                                substitution2.(arg.ranges))
@@ -1337,7 +1329,7 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                                                         s2[(params[1:D].-I)..., N=params[end]]
                                                        ])
 
-    op = MultilinearSeriesOperation(v -> sum(v), arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
+    op = MultilinearSeriesOperation(+, arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
 
 
 
@@ -1442,7 +1434,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                               idx, 
                                               params[x_idx:end-1]...,
                                               N=params[end]]
-                    op = MultilinearSeriesOperation(v -> sum(v), arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))])
+                    op = MultilinearSeriesOperation(+, arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))])
 
                     function get_selfseries_coefficients1(idcs::Vararg{Int}; N=nothing)
                         res = Set()
@@ -1470,7 +1462,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                 
                 else # the center components do not match => LocalizedPDESeries
 
-                    arg2(idx::Int; params) = NlinearSeriesOperation(v -> sum(v), 
+                    arg2(idx::Int; params) = NlinearSeriesOperation(sum, 
                                                [NlinearSeriesOperation(v -> v[1]*v[2]*v[3],
                                                 [dynamic_binomial(idx, m),
                                                  s[
@@ -1485,7 +1477,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                                )                                                
                                                for m in 0:min(params[other_x],idx)
                                                ])
-                    op = MultilinearSeriesOperation(v -> sum(v), 
+                    op = MultilinearSeriesOperation(+, 
                                                     arg2, 
                                                     [generate_index_list(l-1);:∞], 
                                                     [(0,:∞)])
@@ -1513,11 +1505,23 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                     new_series=SymbolicSeries(op, center, get_selfseries_coefficients2, s.contains_selfseries)
                     new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
 
+                    @info("You are evaluating a series with twice the same variables but \
+                           center components do not match. Use LocalizedPDESeries to \
+                           compute the coefficients.")
+
                     return new_series(new_at...; _nbr_found=_nbr_found)
                     
                 end
 
             end
+
+        elseif x isa Tuple{ScalarSeriesSymbol, Int} # x is a polynomial
+
+            # TODO
+
+        elseif x isa ScalarSeriesSymbol # x isa a PowerSeries
+        
+            # TODO
 
         else # x is a constant
 
@@ -1545,7 +1549,7 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
                                                             (x-s.center[x_idx])^idx
                                                            ])
 
-                op = MultilinearSeriesOperation(v -> sum(v), arg4, [generate_index_list(l-1);:∞], [(0,:∞)])
+                op = MultilinearSeriesOperation(+, arg4, [generate_index_list(l-1);:∞], [(0,:∞)])
 
                 function get_selfseries_coefficients4(idcs::Vararg{Int}; N)
                     res = Set()
@@ -1562,6 +1566,9 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
 
                 new_series = SymbolicSeries(op, center, get_selfseries_coefficients4, s.contains_selfseries)
                 new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
+
+                @info("You are evaluating a series at a point different from its center. \
+                       Use LocalizedPDESeries to compute the coefficients.")
 
                 return new_series(new_at...; _nbr_found=_nbr_found)
             end
@@ -2066,7 +2073,7 @@ end
 
     - `ps::PDESeries` -- the PowerSeries for which the coefficients should be computed
     - `N::Int` -- the order up to which the coefficients should be computed
-    - `solver=LS.QRFactorization()` -- The solver to be used. The solver should take as 
+    - `solver=julia_default` -- The solver to be used. The solver should take as 
       input a LinearSolve.LinearProblem and return a Vector of the coefficients values. 
       These values should be castable to the PDESeries T type parameter.
     - `verbose::Int=0` -- 
@@ -2088,7 +2095,7 @@ end
       problem 
 """
 function compute_coefficients!(ps::PDESeries{T}, N::Int; 
-                               solver=LS.QRFactorization(), 
+                               solver=nothing, 
                                verbose::Int=0) where T
 
     N ≤ ps.order && return
@@ -2134,7 +2141,15 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
 
     # solve
     prob = LS.LinearProblem(A, b)
-    res = LS.solve(prob, solver)
+    if benchmark
+        print("solver took: ")
+    end
+    t1 = time()
+    res = solver(prob)
+    t2 = time()
+    if benchmark
+        println("$(t2-t1) seconds")
+    end
 
     # make room to add new coefficients 
     old_length = length(ps.coefficients[1])
@@ -2273,7 +2288,7 @@ expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -
 
 """
     compute_coefficients!(ps::LocalizedPDESeries, N::Int; 
-                          solver=nothing, verbose=false)
+                          solver=julia_default, verbose=0, benchmark::Bool=false)
 
     Compute coefficients of ps up to order N.
 
@@ -2283,18 +2298,23 @@ expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -
     - `N::Int` -- the order up to which the coefficients should be computed
     - `solver=QRFactorization()` -- The solver to be used. The solver should take as input
       a LinearSolve.LinearProblem and return a Vector of the coefficients values. These
-      values should be castable to the LocalizedPDESeries T type parameter.
+      values should be castable to the LocalizedPDESeries T type parameter. It should also
+      an optionnal named argument benchmark that can be used to display the time solving
+      the system took
     - `verbose=0` -- verbose level
       * ≥ 1 -- print a message once the coefficients have been computed
       * ≥ 2 -- shows the equations that are to be solved and the associated unknowns
       * ≥ 3 -- shows the equations that were discarded
+    - `benchmark::Bool=false` -- Used for benchmarking. If set to true, will print the
+      time the solver took to solve the system of equations
 
     ###Output
 
     Stores new coefficients to ps and increases its order
 
 """
-function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFactorization(), verbose=0) where T
+function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; 
+                               solver=julia_default, verbose=0, benchmark::Bool=false) where T
 
     # first generate all expected unknowns of order up to N
     unknowns = expected_unknowns_upto(ps.unknown, length(ps.variables), N) 
@@ -2331,7 +2351,12 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; solver=LS.QRFa
 
     # solve
     prob = LS.LinearProblem(A,b)
-    res = LS.solve(prob, solver)
+    t1 = time()
+    res = solver(prob; benchmark=benchmark)
+    t2 = time()
+    if benchmark
+        println("solver took $(t2-t1) seconds")
+    end
 
     # make room to add new coefficients 
     foreach(idx -> resize!(ps.coefficients[idx], nbr_coeffs), eachindex(ps.coefficients))

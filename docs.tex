@@ -70,13 +70,19 @@ This module was developped in Julia 1.12.6
 This module makes use of several pre-existing Julia modules:
 
 \begin{itemize}
-    \item Symbolics: v7.24.2
-    \item TaylorSeries: v0.21.10
-    \item LinearSolve: v3.85.2
-\end{itemize} 
+    \item Symbolics: v7.31.0
+    \item TaylorSeries: v0.22.4
+    \item LinearSolve: v4.2.0
+    \item MUMPS: v1.6.1
+    \item CUDSS: v0.7.0
+    \item CUDA: v6.2.0
+    \item ParU\_jll: v1.0.0+0
+\end{itemize}
 
 These can be installed by typing \code{]} in the Julia REPL and then using the command \\ 
-\code{add Symbolics TaylorSeries LinearSolve}
+\code{add Symbolics TaylorSeries LinearSolve MUMPS CUDSS CUDA ParU\_jll}
+
+Some of these modules can be avoided by commenting the corresponding solvers in "solvers.jl"
 
 Examples use Pluto notebooks and GLMakie for display
 
@@ -89,7 +95,7 @@ Examples use Pluto notebooks and GLMakie for display
 These can be installed by typing \code{]} in the Julia REPL and then using the command \\ 
 \code{add Pluto PlutoUI GLMakie}
 
-Tests and benchmarking rely on Julia Test and BenchmarkTools modules
+Tests and benchmarking rely on Julia Test and BenchmarkTools modules.
 
 \begin{itemize}
     \item Test: v1.11.0
@@ -160,7 +166,7 @@ One can test which of LinearSolve' solvers is the fastest for a specific problem
 There are two benchmarks that can be used to test problems requiring LocalizedPDESeries (the hardest ones):
 \begin{itemize}
     \item "benchmark\_LocalizedPDESeries.jl" -- used for complete benchmarking using BenchmarkTools' \code{@btime} macro
-    \item "quickbenchmark\_LocalizedPDESeries.jl" -- which does not use the \code{@btime} macro, making it possibly a lot faster but also less precise. Can be used to test the solvers up to high orders
+    \item "quickbenchmark\_LocalizedPDESeries.jl" -- which does not use the \code{@btime} macro, making it possibly a lot faster but also less precise. Can be used to test the solvers up to high orders. Will also output useful informations on the time that was dedicated to solving the system ("solving took...") and the total time that the solver required("solver took...")
 \end{itemize}
 
 Some solvers from LinearSolve can't be used directly (solvers using sparsity or CUDA cores) so parser were written for them in the "custom\_solvers.jl" file
