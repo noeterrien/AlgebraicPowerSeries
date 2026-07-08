@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -142,7 +142,7 @@ md"""
 # ╔═╡ 8909a420-10e8-4f34-8adb-71713d06d3fa
 begin 
 	K1_ps = create_PDESeries(centers[3], λ0)
-	compute_coefficients!(K1_ps, maxOrder; verbose=2)
+	compute_coefficients!(K1_ps, maxOrder; solver=QRFactorization)
 end
 
 # ╔═╡ 488cd860-2322-4f16-865b-cf43e4b4715d
@@ -181,8 +181,6 @@ md"""
 K2_ps = TranslatedSeries(:K2, K1_ps, centers[1])
 
 # ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
-# ╠═╡ disabled = true
-#=╠═╡
 # compute coefficients and resulting polynomials
 begin
 	Ks2 = []
@@ -195,29 +193,19 @@ begin
 
 	end
 end
-  ╠═╡ =#
 
 # ╔═╡ b131bcd4-ae1b-4752-9f0e-7efee2b00590
-# ╠═╡ disabled = true
-#=╠═╡
 # plot result
 for (order, f) in zip(orders2, Ks2)
 	lines!(axs[2], y_range, f.(y_range); label="N = $order")
 end
-  ╠═╡ =#
 
 # ╔═╡ eee0829b-3d39-4374-9378-44a6206bbeed
-# ╠═╡ disabled = true
-#=╠═╡
 # legend
 fig[2,2] = Legend(fig, axs[2], "orders", framevisible=false)
-  ╠═╡ =#
 
 # ╔═╡ 7ffc5a02-b91a-426e-b4b6-eb82452c4f77
-# ╠═╡ disabled = true
-#=╠═╡
 display(fig)
-  ╠═╡ =#
 
 # ╔═╡ 9f958e1d-b0d8-4129-a01e-aa1ff7c1f175
 md"""
@@ -268,7 +256,7 @@ function plot_locPDESeries(pdeseries, ax, leg_idx; show=false)
 	Ks4 = []
 	for order in orders2
 		
-		compute_coefficients!(pdeseries, order; verbose=2)
+		compute_coefficients!(pdeseries, order; solver=QRFactorization)
 		K4, = build_matrix_elt(pdeseries, order)
 		boundary_K4(y) = K4(1,y)				
 		push!(Ks4, boundary_K4)

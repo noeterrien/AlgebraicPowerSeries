@@ -2095,7 +2095,7 @@ end
       problem 
 """
 function compute_coefficients!(ps::PDESeries{T}, N::Int; 
-                               solver=nothing, 
+                               solver=julia_default, 
                                verbose::Int=0) where T
 
     N ≤ ps.order && return
@@ -2141,15 +2141,7 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
 
     # solve
     prob = LS.LinearProblem(A, b)
-    if benchmark
-        print("solver took: ")
-    end
-    t1 = time()
     res = solver(prob)
-    t2 = time()
-    if benchmark
-        println("$(t2-t1) seconds")
-    end
 
     # make room to add new coefficients 
     old_length = length(ps.coefficients[1])
