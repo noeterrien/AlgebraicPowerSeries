@@ -1,6 +1,6 @@
 using Test
 using BenchmarkTools
-include("../utilitaries.jl")
+include("../utils.jl")
 
 
 @test convertIndices_fullsym_to_trunc(0,0,0) ≈ [0,0,0]

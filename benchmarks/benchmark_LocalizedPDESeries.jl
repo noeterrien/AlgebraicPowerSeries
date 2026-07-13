@@ -4,7 +4,6 @@ using BenchmarkTools
 import LinearSolve as LS
 
 include("../AlgebraicPowerSeries.jl")
-include("../custom_solvers.jl")
 
 ################################## benchmark Parameters ###################################
 
