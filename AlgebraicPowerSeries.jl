@@ -1515,14 +1515,6 @@ function (s::SymbolicSeries{D})(at::Vararg{Any, D}; _nbr_found=0) where D
 
             end
 
-        elseif x isa Tuple{ScalarSeriesSymbol, Int} # x is a polynomial
-
-            # TODO
-
-        elseif x isa ScalarSeriesSymbol # x isa a PowerSeries
-        
-            # TODO
-
         else # x is a constant
 
             if isequal(at[x_idx], s.center[x_idx]) # x matches center component => allow use of PDESeries
