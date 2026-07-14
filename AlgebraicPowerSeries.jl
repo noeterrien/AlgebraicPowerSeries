@@ -957,7 +957,7 @@ function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) whe
     idx_subst[:∞] = N
 
     substitution2(t) = (substitution(t[1]), substitution(t[2]))
-    function substitution(arg) 
+    function substitution(arg)
         if arg isa ScalarSeriesSymbol 
             arg[convertIndices_fullsym_to_trunc(args...)...]
         elseif arg isa SymbolicSeries
@@ -2272,6 +2272,8 @@ function PDES_should_discard_new_equation(unknowns::Set{<:SeriesCoefficient}, N:
 
     return false
 end
+
+
 
 """
     compute_coefficients!(ps::PDESeries, N::Int; 
