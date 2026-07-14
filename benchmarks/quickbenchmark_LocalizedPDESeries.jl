@@ -9,7 +9,7 @@ save_to = "quickbenchmark_LocalizedPDESeries.txt"
 
 iszero_tol = 1e-15
 
-compileOrder = 3 # used to compile the required functions before measuring the time needed
+compileOrder = 1 # used to compile the required functions before measuring the time needed
 maxOrder = 50
 
 # The solvers to test
