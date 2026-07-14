@@ -1239,7 +1239,7 @@ end
 
     If s(x,y) = ∑ᵢ,ⱼ sᵢⱼ xⁱyʲ, then shift(s, (1,2))(x,y) = ∑ᵢ,ⱼ s₍ᵢ₊₁₎₍ⱼ₊₂₎ xⁱyʲ
 """
-function shift(s::SymbolicSeries{D}, by::NTuple{Int, D}) where D
+function shift(s::SymbolicSeries{D}, by::NTuple{D, Int}) where D
     order_decrease = sum(by)
     op = NlinearSeriesOperation(v -> s[[v[i]+by[i] for i in 1:D]..., 
                                      N=isnothing(v[end]) ? nothing : v[end]-order_decrease],
@@ -1376,9 +1376,16 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
 
     function get_self_series_coefficients(I::Vararg{Int, D}; N=nothing)
         ranges = CartesianIndices(tuple([0:i for i in I]...))
-        union([s1.get_selfseries_coefficients(Tuple(idx)...; N=N) ∪ 
-               s2.get_selfseries_coefficients((I.-Tuple(idx))...; N=N)
-               for idx in ranges]...)
+        res = Set()
+        for idx in ranges
+            if !isequal(getNum(s1[Tuple(idx)..., N=N]), 0)
+                res = res ∪ s2.get_selfseries_coefficients((I.-Tuple(idx))...; N=N)
+            end
+            if !isequal(getNum(s2[(I.-Tuple(idx))..., N=N]), 0)
+                res = res ∪ s1.get_selfseries_coefficients(Tuple(idx)...; N=N)
+            end
+        end
+        res
     end
 
     SymbolicSeries(op, s1.center, get_self_series_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
@@ -1733,7 +1740,7 @@ end
 
     - `func` -- The function to be applied to the `arg` Vector. Arguments will be given as
       a Vector.
-    - `arg::Vector` -- The arguments to be given to `func`
+    - `args::Vector` -- The arguments to be given to `func`
     - `expansion_layer::Int` -- At which expansion layer was this
       UnexpandedEvaluatedSymbolicSeries created
     - `last_layer_func` -- Equivalent of func when the last expansion layer has been 
@@ -1741,44 +1748,48 @@ end
 """
 struct UnexpandedEvaluatedSymbolicSeries
     func
-    arg::Vector
+    args::Vector
     expansion_layer::Int
     last_layer_func
 end
 
-get_expansion_layer(x) = 0
 get_expansion_layer(uess::UnexpandedEvaluatedSymbolicSeries) = uess.expansion_layer
 
-function expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int) 
-    expanded_args = []
-    for arg in uess.args
-        if arg isa UnexpandedEvaluatedSymbolicSeries
-            if get_expansion_layer(arg) < N
-                push!(expanded_args, expand(uess, N))
+function expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::EvaluatedSymbolicSeries
+    if uess.expansion_layer ≥ N  
+        res = uess.last_layer_func() 
+        res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
+    else
+        expanded_args = []
+        for arg in uess.args
+            if arg isa UnexpandedEvaluatedSymbolicSeries
+                push!(expanded_args, expand(arg, N))
             else
-                push!(expanded_args, arg.last_layer_func())
+                push!(expanded_args, arg)
             end
-        else
-            push!(expanded_args, arg)
         end
+        res = uess.func(expanded_args)
+        res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
     end
-    uess.func(expanded_args; trunc_order=N)
 end
 
-Base.zero(::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(x -> 0, [])
+Base.zero(::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(x -> 0, [], 0, () -> 0)
 
 unexp_add(v::Vector) = v[1] + v[2]
-Base.:+(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess, x], max(get_expansion_layer(uess), get_expansion_layer(x)), () -> uess.last_layer_func() + (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
-Base.:+(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [x, uess], max(get_expansion_layer(uess), get_expansion_layer(x)), () -> uess.last_layer_func() + (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
+Base.:+(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess, x], get_expansion_layer(uess), () -> uess.last_layer_func() + x)
+Base.:+(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [x, uess], get_expansion_layer(uess), () -> uess.last_layer_func() + x)
+Base.:+(uess1::UnexpandedEvaluatedSymbolicSeries, uess2::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess1, uess2], max(get_expansion_layer(uess1), get_expansion_layer(uess2)), () -> uess1.last_layer_func() + uess2.last_layer_func())
 
 unexp_sub(v::Vector) = v[1] - v[2]
-Base.:-(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_sub, [uess, x], max(get_expansion_layer(x), get_expansion_layer(uess)), () -> uess.last_layer_func() - (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
-Base.:-(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_sub, [x, uess], max(get_expansion_layer(x), get_expansion_layer(uess)), () -> uess.last_layer_func() - (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
+Base.:-(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_sub, [uess, x], get_expansion_layer(uess), () -> uess.last_layer_func() - x)
+Base.:-(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_sub, [x, uess], get_expansion_layer(uess), () -> x - uess.last_layer_func())
+Base.:-(uess1::UnexpandedEvaluatedSymbolicSeries, uess2::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess1, uess2], max(get_expansion_layer(uess1), get_expansion_layer(uess2)), () -> uess1.last_layer_func() - uess2.last_layer_func())
 Base.:-(uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_sub, [0, uess], get_expansion_layer(uess), () -> -uess.last_layer_func())
 
 unexp_prod(v::Vector) = v[1] * v[2]
-Base.:*(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_prod, [uess, x], max(get_expansion_layer(uess), get_expansion_layer(x)), () -> uess.last_layer_func() * (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
-Base.:*(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_prod, [x, uess], max(get_expansion_layer(uess), get_expansion_layer(x)), () -> uess.last_layer_func() * (x isa UnexpandedEvaluatedSymbolicSeries ? x.last_layer_func() : x))
+Base.:*(uess::UnexpandedEvaluatedSymbolicSeries, x) = UnexpandedEvaluatedSymbolicSeries(unexp_prod, [uess, x], get_expansion_layer(uess), () -> uess.last_layer_func() * x)
+Base.:*(x, uess::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_prod, [x, uess], get_expansion_layer(uess), () -> uess.last_layer_func() * x)
+Base.:*(uess1::UnexpandedEvaluatedSymbolicSeries, uess2::UnexpandedEvaluatedSymbolicSeries) = UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess1, uess2], max(get_expansion_layer(uess1), get_expansion_layer(uess2)), () -> uess1.last_layer_func() * uess2.last_layer_func())
 
 unexp_div(v::Vector) = v[1] / v[2]
 Base.:/(uess::UnexpandedEvaluatedSymbolicSeries, t::Number) = UnexpandedEvaluatedSymbolicSeries(unexp_div, [uess, t], get_expansion_layer(uess), () -> uess.last_layer_func() / t)
@@ -1973,18 +1984,18 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
 
 end
 
-unexp_eval(v::Vector) = v[1](v[2]...; expansion_layer=v[6]) + v[3]*v[4](v[5]...; expansion_layer=v[6]+1)
+unexp_eval(v::Vector) = v[1](v[2]...; expansion_layer=v[6]+1) + v[3]*v[4](v[5]...; expansion_layer=v[6]+1)
 
 """
-    evaluate_with_composition(s::SymbolicSeries{D}, at::Vararg{Any, D},
-                              ess_idx::Int)::UnexpandedEvaluatedSymbolicSeries where D
+    evaluate_with_composition(s::SymbolicSeries{D}, at::Vararg{Any, D};
+                              ess_idx::Int, expansion_layer::Int)::UnexpandedEvaluatedSymbolicSeries where D
 
     Evaluate `s` at `at` where elements of `at` can be either variables described by 
     Symbolics' `Num` objects, constants or SymbolicSeries. The result of this function is
     an UnexpandedEvaluatedSymbolicSeries, which allows composing series
 """
-function evaluate_with_composition(s::SymbolicSeries{D}, at::Vararg{Any, D}, 
-                                   ess_idx::Int, expansion_layer)::UnexpandedEvaluatedSymbolicSeries where D
+function evaluate_with_composition(s::SymbolicSeries{D}, at::Vararg{Any, D}; 
+                                   ess_idx::Int, expansion_layer::Int)::UnexpandedEvaluatedSymbolicSeries where D
     
     # build new at to compute constant term
     new_at = [at...]
@@ -1996,20 +2007,20 @@ function evaluate_with_composition(s::SymbolicSeries{D}, at::Vararg{Any, D},
     # build new series to evaluate
     by = zeros(Int, D)
     by[ess_idx] = 1
-    new_s = shift(s, tuple(by))
+    new_s = shift(s, Tuple(by))
 
     # build resulting UnexpandedEvaluatedSymbolicSeries
     UnexpandedEvaluatedSymbolicSeries(unexp_eval, [s, new_at, f, new_s, at, expansion_layer], expansion_layer, () -> s(new_at...; expansion_layer=expansion_layer))
 end
 
-function (s::SymbolicSeries{D}, at::Vararg{Any, D}; expansion_layer=0) where D
+function (s::SymbolicSeries{D})(at::Vararg{Any, D}; expansion_layer=0) where D
     
     ess_idx = findfirst(x -> x isa EvaluatedSymbolicSeries, at)
 
     if isnothing(ess_idx)
-        evaluate(s, at)
+        evaluate(s, at...)
     else
-        evaluate_with_composition(s, at, ess_idx; expansion_layer)
+        evaluate_with_composition(s, at...; ess_idx, expansion_layer)
     end
 
 end
@@ -2130,6 +2141,7 @@ end
 
 Base.:~(LHS::UnexpandedEvaluatedSymbolicSeries, RHS) = UnexpandedSymbolicSeriesEquation(LHS, RHS)
 Base.:~(LHS, RHS::UnexpandedEvaluatedSymbolicSeries) = UnexpandedSymbolicSeriesEquation(LHS, RHS)
+Base.:~(LHS::UnexpandedEvaluatedSymbolicSeries, RHS::UnexpandedEvaluatedSymbolicSeries) = UnexpandedSymbolicSeriesEquation(LHS, RHS)
 
 function expand(eq::UnexpandedSymbolicSeriesEquation, N::Int)
     (eq.LHS isa UnexpandedEvaluatedSymbolicSeries ? expand(eq.LHS, N) : eq.LHS) ~
@@ -2192,13 +2204,13 @@ mutable struct PDESeries{T,D} <: PowerSeries{T,D}
     order::Int
     scalar_series_ref::Array{ScalarSeriesSymbol, D}
 
-    equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}}
+    equations::Vector
     maxIntegrationOrders::Vector{Int}
     used_equations::Vector{Set{Vector{Int}}}
 
     function PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector, 
                           unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}, 
-                          equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}},
+                          equations::Vector,
                           maxIntegrationOrders::Vector{Int}) where {T}
 
         _size = unknown isa AbstractArray ? size(unknown) : (1,)
@@ -2218,7 +2230,7 @@ end
 
 function PDESeries{T}(seriesID::Symbol, variables::Vector{Num}, center::Vector,
                       unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol},
-                      equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}}) where T
+                      equations::Vector) where T
     maxIntegrationOrders = zeros(Int, length(equations))
     PDESeries{T}(seriesID, variables, center, unknown, equations, maxIntegrationOrders)
 end
@@ -2323,8 +2335,8 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
                     push!(eqs, getNum(eq, idx...))
                     push!(ps.used_equations[eq_idx], idx)
                 elseif verbose ≥ 3
-                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...)), \n
-                             involved coefficients were $new_unknowns")
+                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...))")
+                    println("involved coefficients were $new_unknowns")
                 end
             end
         end
@@ -2424,14 +2436,14 @@ mutable struct LocalizedPDESeries{T,D} <: PowerSeries{T,D}
     order::Int
     scalar_series_ref::Array{ScalarSeriesSymbol, D}
 
-    equations::Vector{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}
+    equations::Vector
     maxIntegrationOrders::Vector
     unknown::Array{ScalarSeriesSymbol, D}
 
     function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num}, 
                                    center::Vector,
                                    scalar_series_ref::Array{<:ScalarSeriesSymbol, D},
-                                   equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}},
+                                   equations::Vector,
                                    maxIntegrationOrders::Vector{<:Int},
                                    unknown::Union{Array{<:ScalarSeriesSymbol}, 
                                                   ScalarSeriesSymbol}) where {T,D}
@@ -2451,7 +2463,7 @@ end
 
 function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num}, 
                                center::Vector,
-                               equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}},
+                               equations::Vector,
                                unknown::Union{Array{<:ScalarSeriesSymbol}, 
                                               ScalarSeriesSymbol},
                                maxIntegrationOrders::Vector{Int}) where T
@@ -2464,7 +2476,7 @@ end
 
 function LocalizedPDESeries{T}(seriesID::Symbol, variables::Vector{Num},
                                center::Vector,
-                               equations::Vector{<:Union{SymbolicSeriesEquation, UnexpandedSymbolicSeriesEquation}},
+                               equations::Vector,
                                unknown::Union{Array{<:ScalarSeriesSymbol}, ScalarSeriesSymbol}) where T
 
     maxIntegrationOrders = zeros(Int, length(equations))

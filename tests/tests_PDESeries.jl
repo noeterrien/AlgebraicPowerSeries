@@ -1,6 +1,7 @@
 include("../AlgebraicPowerSeries.jl")
 
 using Test
+using LinearAlgebra:Diagonal
 
 @variables x y z t
 @variables i j k
@@ -122,7 +123,6 @@ let
     @test get_involved_selfseries_coefficients(R4, 0, 0) == Set([K_symbols[1][1,0], K_symbols[1][1,1], K_symbols[1][0,0], K_symbols[2][0,0]])
 
     # PDESeries
-    getindices(N) = N ≥ 1 ? generate_fullsym_indices(N-1, 2) : []
     K = PDESeries{Float64}(:K, [x,ξ], [0,0], K_symbols, [R1, R2, R3, R4])
     compute_coefficients!(K, N; verbose=2)
 
@@ -171,3 +171,38 @@ let
         @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
     end
 end
+
+#------------------------------------------------- Test with composition of series -----------------------------------------------
+
+# parameters 
+
+N = 3 # order
+center = [0,0]
+
+μ₁, μ₂ = 0.5, 0.3
+
+σ_ts = TaylorExpansionSeries{Float64}(:σ, [x], [0; 0.3 + x^2/3 ;; 0.2 + x/3 ; 0], [0])
+compute_coefficients!(σ_ts, N)
+σ = SymbolicSeries(σ_ts)
+σ₁₂, σ₂₁ = σ[1,2], σ[2,1]
+
+characteristic_ts = TaylorExpansionSeries{Float64}(:c, [x], [μ₂/μ₁*x], [0])
+compute_coefficients!(characteristic_ts, N)
+characteristic = SymbolicSeries(characteristic_ts)(x)
+
+# PDE and boundary conditions
+unknowns = selfseries_symbols(3, 2)
+L = SymbolicSeries(unknowns, center)
+L¹₁₁, L²₁₁, L₂₁, L¹₁₂, L²₁₂, L₂₂, = L
+
+PDEs = Diagonal([μ₁, μ₁, μ₂]) * ∂x(L(x, ξ)) + ∂ξ(L(x,ξ)) * Diagonal([μ₁, μ₂]) .~ L(x, ξ) * σ(ξ)
+BCs = [L¹₁₁(x, 0) ~ 0, 
+       L¹₁₂(x, 0) ~ 0,
+       L₂₂(x,0)   ~ 0,
+       L²₁₂(x,x)  ~ σ₁₂(x)/(μ₂-μ₁),
+       L₂₁(x,x)   ~ σ₂₁(x)/(μ₁-μ₂),
+       L¹₁₁(x, characteristic) ~ L²₁₁(x, characteristic)]
+
+# PDESeries
+L_ps = PDESeries{Float64}(:L, [x, ξ], center, unknowns, [PDEs..., BCs...])
+compute_coefficients!(L_ps, N; verbose=2)
