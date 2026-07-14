@@ -667,16 +667,21 @@ end
       empty, add the default value `params=[]`
     - `ranges::Vector{Tuple{Any, Any}}` -- The ranges between which the indices vary. i.e :
       xᵢ ∈ aᵢ:bᵢ where ranges = [(aᵢ, bᵢ)...]
+    - `argNum2` -- Same as arg but should return the result of getNum2(arg(idcs...; params=arg_parameters), idx...; N). 
+      where idcs is an element of ranges. Since idx and N cannot be known at the time of constructing the operation, 
+      they must be passed to arg_parameters using :idxi and :∞ symbols
 
     ###Example
 
     - `MultilinearSeriesOperation(aggreg, 
                                   arg, 
-                                  arg_parameters::Vector
-                                  ranges::Vector{Tuple{Any, Any}})` -- default constructor
+                                  arg_parameters::Vector,
+                                  ranges::Vector{Tuple{Any, Any}},
+                                  argNum2)` -- default constructor
     - `MultilinearSeriesOperation(aggreg, 
                                   arg,
-                                  ranges::Vector{Tuple{Any, Any}})` -- constructor for 
+                                  ranges::Vector{Tuple{Any, Any}},
+                                  argNum2)` -- constructor for 
       MultilinearSeriesOperation with empty arg_parameters
 """
 struct MultilinearSeriesOperation
@@ -684,10 +689,11 @@ struct MultilinearSeriesOperation
     arg
     arg_parameters::Vector
     ranges::Vector{Tuple{Any, Any}}
+    argNum2
 end
 
-MultilinearSeriesOperation(aggreg, arg, ranges::Vector{Tuple{Any, Any}}) = 
-    MultilinearSeriesOperation(aggreg, arg, [], ranges)
+MultilinearSeriesOperation(aggreg, arg, ranges::Vector{Tuple{Any, Any}}, argNum2) = 
+    MultilinearSeriesOperation(aggreg, arg, [], ranges, argNum2)
 
 function Base.show(io::IO, op::MultilinearSeriesOperation)
     indices = ["i_$i, " for i in 1:length(op.ranges)]
@@ -748,13 +754,17 @@ end
     - `starts::Vector` -- The indices at which the indices should start
     - `maxOrder::Int` -- The order up to which these indices should go (can only be set by
       the getindex function and should be set to -1 by default)
+    - `argNum2` -- Same as arg but should return the result of getNum2(arg(idcs...; params=arg_parameters), idx...; N). 
+      where idcs is an element of ranges. Since idx and N cannot be known at the time of constructing the operation, 
+      they must be passed to arg_parameters using :idxi and :∞ symbols
     
     ###Examples
 
     - `TruncatedMultilinearSeriesOperation(aggreg, 
                                            arg, 
                                            arg_parameters::Vector, 
-                                           starts::Vector)` -- default constructor
+                                           starts::Vector,
+                                           argNum2)` -- default constructor
 """
 struct TruncatedMultilinearSeriesOperation
     aggreg
@@ -762,10 +772,11 @@ struct TruncatedMultilinearSeriesOperation
     arg_parameters::Vector
     starts::Vector
     maxOrder::Int
+    argNum2
 end
 
-TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters::Vector, starts::Vector) =
-    TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters, starts, -1)
+TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters::Vector, starts::Vector, argNum2) =
+    TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters, starts, -1, argNum2)
 
 function Base.show(io::IO, op::TruncatedMultilinearSeriesOperation)
     starts = ["i_$i, " for i in 1:length(op.starts)]
@@ -831,10 +842,11 @@ end
 
     - `ref::Union{ScalarSeriesSymbol, 
                   NlinearSeriesOperation,
-                  MultilinearSeriesOperation}` -- How are each coefficients defined.
+                  MultilinearSeriesOperation,
+                  TruncatedMultilinearSeriesOperation}` -- How are each coefficients defined.
       SymbolicSeries are represented as trees where SymbolicSeries are the nodes, 
-      NlinearSeriesOperation and MultilinearSeriesOperation are the branches,
-      and ScalarSeriesSymbol are the leaves (leaves may also be other objects such as 
+      NlinearSeriesOperation, MultilinearSeriesOperation and TruncatedMultilinearSeriesOperation
+      are the branches, and ScalarSeriesSymbol are the leaves (leaves may also be other objects such as 
       Numbers)
     - `center::Vector` -- A vector of length D which represents the center 
       around which the series should be computed when needed. Its component can be set two 
@@ -1109,9 +1121,30 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
                                                      s[coeff_idx..., N=params[end]], 
                                                      centers])
     end
+
+    function argNum2(k::Vararg{Int}; params=[])
+        binoms = 1
+        coeff_idx = []
+        centers = 1
+        implied_idx = 1
+        for (i, is_implied, new_c, c) in 
+            zip(1:D, is_center_comp_trans, new_center, s.center)
+
+            if is_implied
+                binoms *= dynamic_binomial(k[implied_idx], params[i])
+                push!(coeff_idx, k[implied_idx])
+                centers *= (new_c-c)^(k[implied_idx]-params[i])
+                implied_idx += 1
+            else
+                push!(coeff_idx, params[i])
+            end
+
+        end
+        binoms*getNum2(s, coeff_idx...; N=params[end])*centers
+    end
     
     idcs = generate_index_list(D)
-    op = TruncatedMultilinearSeriesOperation(+, arg, [idcs; :∞], idcs[is_center_comp_trans])
+    op = TruncatedMultilinearSeriesOperation(+, arg, [idcs; :∞], idcs[is_center_comp_trans], argNum2)
 
     function get_at_given_idx(I::NTuple{D, Int}, k::Vararg{Int}; N)
         coeff_idx = Vector{Int}(undef, D)
@@ -1370,7 +1403,9 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
                                                         s2[(params[1:D].-I)..., N=params[end]]
                                                        ])
 
-    op = MultilinearSeriesOperation(+, arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D])
+    argNum2(I::Vararg; params=[]) = getNum2(s1, I...; N=params[end])*getNum2(s2, I...; N=params[end])
+
+    op = MultilinearSeriesOperation(+, arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D], argNum2)
 
 
 
@@ -1848,7 +1883,15 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                                               idx, 
                                               params[x_idx:end-1]...,
                                               N=params[end]]
-                    op = MultilinearSeriesOperation(+, arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))])
+
+                    argNum2_1(idx::Int; params) = getNum2(s, params[1:other_x-1]..., 
+                                                          params[other_x]-idx, 
+                                                          params[other_x+1:x_idx-1]..., 
+                                                          idx, 
+                                                          params[x_idx:end-1]...; 
+                                                          N=params[end])
+
+                    op = MultilinearSeriesOperation(+, arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))], argNum2_1)
 
                     function get_selfseries_coefficients1(idcs::Vararg{Int}; N=nothing)
                         res = Set()
@@ -1891,10 +1934,23 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                                                )                                                
                                                for m in 0:min(params[other_x],idx)
                                                ])
+
+                    argNum2_2(idx::Int; params) = sum([dynamic_binomial(idx, m)*
+                                                       getNum2(s, 
+                                                               params[1:other_x-1]...,
+                                                               params[other_x]-m,
+                                                               params[other_x+1:x_idx-1]...,
+                                                               idx,
+                                                               params[x_idx:end-1]...;
+                                                               N=params[end])*
+                                                       (s.center[other_x]-s.center[x_idx])^(idx-m)
+                                                       for m in 0:min(params[other_x], idx)])
+
                     op = MultilinearSeriesOperation(+, 
                                                     arg2, 
                                                     [generate_index_list(l-1);:∞], 
-                                                    [(0,:∞)])
+                                                    [(0,:∞)],
+                                                    argNum2_2)
                     
                     function get_selfseries_coefficients2(idcs::Vararg{Int}; N::Int)
                         res = Set()
@@ -1954,8 +2010,11 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                                                            [s[params[1:x_idx-1]...,idx,params[x_idx:end-1]...,N=params[end]],
                                                             (x-s.center[x_idx])^idx
                                                            ])
+                
+                argNum2_4(idx; params) = getNum2(s, params[1:x_idx-1]...,idx,params[x_idx:end-1]...;N=params[end])*
+                                         (x-s.center[x_idx])^idx
 
-                op = MultilinearSeriesOperation(+, arg4, [generate_index_list(l-1);:∞], [(0,:∞)])
+                op = MultilinearSeriesOperation(+, arg4, [generate_index_list(l-1);:∞], [(0,:∞)], argNum2_4)
 
                 function get_selfseries_coefficients4(idcs::Vararg{Int}; N)
                     res = Set()
@@ -2120,6 +2179,65 @@ function get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D},
 
 end
 
+############################### cached getNum function ##############################
+
+getNum2(x::Any, ::Vararg{Int}; N=nothing) = x # default behaviour
+getNum2(sss::ScalarSeriesSymbol, idx::Vararg{Int}; N=nothing) = getNum(sss[convertIndices_fullsym_to_trunc(idx...)...])
+getNum2(sc::SeriesCoefficient, idx::Vararg{Int}; N=nothing) = getNum(sc)
+
+function getNum2(sym::Symbol, idx::Vararg{Int}; N=nothing)
+    if sym == :∞
+        return N
+    else
+        for (i, v) in enumerate(idx)
+            if sym == Symbol("idx$i")
+                return v
+            end
+        end
+        throw(ArgumentError("Tried to getNum of unknown symbol: $sym"))
+    end
+end
+
+getNum2_rg(t::Tuple{Any, Any}, idx::Vararg{Int}; N=nothing) = (getNum2(t[1], idx...; N):getNum2(t[2], idx...; N))
+
+getNum2(op::NlinearSeriesOperation, idx::Vararg{Int}; N=nothing) =     
+    getNum2(op.func(map(arg -> getNum2(arg, idx...; N), op.args)), idx...; N)
+
+function getNum2(op::MultilinearSeriesOperation, idx::Vararg{Int}; N=nothing)
+    
+    rngs = CartesianIndices(tuple(map(rg -> getNum2_rg(rg, idx...; N), op.ranges)...))
+    params = map(p -> getNum2(p, idx...; N), op.arg_parameters)
+    res = 0
+    for idcs in rngs
+        res = op.aggreg(res, op.argNum2(Tuple(idcs)...; params))
+    end
+    res
+end
+
+function getNum2(op::TruncatedMultilinearSeriesOperation, idx::Vararg{Int}; N)
+    params = map(p -> getNum2(p, idx...; N), op.arg_parameters)
+    apply_with_fullsym_indices_from_and_upto((k...) -> op.argNum2(k...; params), 
+                                              op.aggreg,
+                                              N,
+                                              op.starts...)
+end
+
+getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = getNum2(s.ref, idx...; N)
+
+const _num_cache = IdDict{Any, Dict{Any, Any}}()
+function cached_getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
+    d = get!(() -> Dict{Any, Any}(), _num_cache, s)
+    get!(d, idx) do
+        getNum2(s, idx...; N)
+    end
+end
+
+clear_num_cache() = empty!(_num_cache)
+
+function cached_getNum(eq::SymbolicSeriesEquation, idx::Vararg{Int}; N=nothing)
+    cached_getNum(eq.LHS, idx...; N) ~ cached_getNum(eq.RHS, idx...; N)
+end
+
 ######################### UnexpandedSymbolicSeriesEquation #######################
 
 """
@@ -2150,6 +2268,38 @@ end
 
 expand(eq::SymbolicSeriesEquation, N::Int) = eq
 
+################################# cached expand ##################################
+
+const _expand_cache = IdDict{Any, Any}()
+function cached_expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::EvaluatedSymbolicSeries
+    get!(_expand_cache, uess) do
+        if uess.expansion_layer ≥ N
+            res = uess.last_layer_func()
+            res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
+        else
+            expanded_args = []
+            for arg in uess.args
+                if arg isa UnexpandedEvaluatedSymbolicSeries
+                    push!(expanded_args, cached_expand(arg, N))
+                else
+                    push!(expanded_args, arg)
+                end
+            end
+            res = uess.func(expanded_args)
+            res isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(uess, N) : res
+        end
+    end
+end
+
+clear_expand_cache() = empty!(_expand_cache)
+
+function cached_expand(eq::UnexpandedSymbolicSeriesEquation, N::Int)::SymbolicSeriesEquation
+    LHS = eq.LHS isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(eq.LHS, N) : eq.LHS
+    RHS = eq.RHS isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(eq.RHS, N) : eq.RHS
+    LHS ~ RHS
+end
+
+cached_expand(eq::SymbolicSeriesEquation, N::Int)::SymbolicSeriesEquation = eq
 
 ################################### PDESeries ####################################
 
@@ -2311,6 +2461,8 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
                                solver=julia_default, 
                                verbose::Int=0) where T
 
+    N == -1 && (clear_num_cache(); clear_expand_cache())
+
     N ≤ ps.order && return
     
     N > ps.order+1 && compute_coefficients!(ps, N-1; solver=solver, verbose=verbose)
@@ -2324,7 +2476,7 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
     unknowns = [unknowns...;]
 
     # expand UnexpandedSymbolicSeriesEquation if necessary
-    ss_equations = map(eq -> expand(eq, N), ps.equations)
+    ss_equations = map(eq -> cached_expand(eq, N), ps.equations)
 
     # then generate all equations of order N
     eqs = Equation[]
@@ -2334,10 +2486,10 @@ function compute_coefficients!(ps::PDESeries{T}, N::Int;
             if idx ∉ ps.used_equations[eq_idx]
                 new_unknowns = get_involved_selfseries_coefficients(eq, idx...)
                 if !(PDES_should_discard_new_equation(new_unknowns, N))
-                    push!(eqs, getNum(eq, idx...))
+                    push!(eqs, cached_getNum(eq, idx...))
                     push!(ps.used_equations[eq_idx], idx)
                 elseif verbose ≥ 3
-                    println("discarded with fullsym index [$idx] : $(getNum(eq, idx...))")
+                    println("discarded with fullsym index [$idx] : $(cached_getNum(eq, idx...))")
                     println("involved coefficients were $new_unknowns")
                 end
             end
@@ -2524,13 +2676,16 @@ expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -
 function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int; 
                                solver=julia_default, verbose=0, benchmark::Bool=false) where T
 
+    clear_num_cache()
+    clear_expand_cache()
+
     # first generate all expected unknowns of order up to N
     unknowns = expected_unknowns_upto(ps.unknown, length(ps.variables), N) 
     nbr_coeffs = length(unknowns[1]) # will be used later
     unknowns = [unknowns...;]
 
     # expand UnexpandedSymbolicSeriesEquation if necessary
-    ss_equations = map(eq -> expand(eq, N), ps.equations)
+    ss_equations = map(eq -> cached_expand(eq, N), ps.equations)
 
     # then generate all equations of orders up to N
     eqs = Equation[]
@@ -2539,9 +2694,9 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int;
         for idx in expand_for_indices
             new_unknowns = get_involved_selfseries_coefficients(eq, idx...; N=N)
             if !(PDES_should_discard_new_equation(new_unknowns, N))
-                push!(eqs, getNum(eq, idx...; N=N))
+                push!(eqs, cached_getNum(eq, idx...; N=N))
             elseif verbose ≥ 3
-                println("discarded with fullsym index [$idx] : $(getNum(eq, idx...; N=N)))")
+                println("discarded with fullsym index [$idx] : $(cached_getNum(eq, idx...; N=N)))")
                 println("involved coefficients were $new_unknowns")
             end
         end
