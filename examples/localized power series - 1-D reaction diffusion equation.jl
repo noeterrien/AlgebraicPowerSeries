@@ -63,7 +63,7 @@ md"""
 """
 
 # ╔═╡ cc968a10-6505-4084-8574-8517a56b4ff4
-orders = [5, 10, 20, 50, 100]
+orders = [5, 10, 20, 50]
 
 # ╔═╡ 258f2608-2168-46c1-ac19-1504231e5d24
 maxOrder = maximum(orders)
@@ -149,7 +149,7 @@ let
 	K = SymbolicSeries(unknown, center)
 
 	BC1 = K(x,0) ~ 0
-	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ + c, 0, x)
+	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ + c, 0, x, x)
 
 	PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ+c)/ε * K(x,y)
 
@@ -200,7 +200,7 @@ let
 	K = SymbolicSeries(unknown, center)
 
 	BC1 = K(x,0) ~ 0
-	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ_x + c, 0, x)
+	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ_x + c, 0, x, x)
 
 	PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ_y+c)/ε * K(x,y)
 
@@ -247,7 +247,7 @@ let
 	K = SymbolicSeries(unknown, center)
 
 	BC1 = K(x,0) ~ 0
-	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ(x) + c, 0, x)
+	BC2 = K(x,x) ~ -1/(2*ε) * ∫(λ(x) + c, 0, x, x)
 
 	PDE = ∂²x(K(x,y)) - ∂²y(K(x,y)) ~ (λ(y)+c)/ε * K(x,y)
 
@@ -304,7 +304,7 @@ display(fig)
 # ╟─f5e4d170-3c05-4c85-9aeb-d51b1ca1062b
 # ╠═eee922ec-a9cc-47fe-84ab-06607cb4db0c
 # ╠═48c6ab4f-9997-4b1e-b1e7-a9c5736c7071
-# ╠═eea543f9-1568-440a-a7f7-875d84547c9c
+# ╟─eea543f9-1568-440a-a7f7-875d84547c9c
 # ╠═745d1e89-4ff9-44a1-b8d7-33af4efe27f0
 # ╠═a6cb3b35-0981-425c-be33-43850dc0ce05
 # ╟─7a750b6f-b202-4faa-ad50-559998d1c49b

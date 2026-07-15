@@ -4,18 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    #! format: off
-    return quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-    #! format: on
-end
-
 # ╔═╡ 96582742-0d69-47a1-bce6-5672385e4bb7
 begin
 	import Pkg;
@@ -59,7 +47,7 @@ md"""
 """
 
 # ╔═╡ c00635e2-6915-4dbf-8675-ba16645f8182
-@bind N PlutoUI.Slider(0:100; default=25, show_value=N -> "Order : N=$N")
+N=25
 
 # ╔═╡ 08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 c = 3; nothing
@@ -130,7 +118,7 @@ y_range = 0:0.1:1; nothing
 begin
 	Ks = []
 	for order in orders
-		K, = build_matrix_elt(K_ps, order)
+		local K, = build_matrix_elt(K_ps, order)
 		boundary_K(y) = K(1,y)
 		push!(Ks, boundary_K)
 	end
@@ -165,7 +153,7 @@ display(fig)
 # ╠═b69c5445-4d87-4986-bfcf-1309079bc36d
 # ╠═f3fa85ca-9d58-401f-83ec-4e2f68584436
 # ╟─3c8656ed-1fba-4d7d-bc05-bec290b2529a
-# ╟─c00635e2-6915-4dbf-8675-ba16645f8182
+# ╠═c00635e2-6915-4dbf-8675-ba16645f8182
 # ╠═08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 # ╠═7636cea2-c846-4c71-bba7-7168ef006283
 # ╠═d1504ce0-6b32-488b-9392-ba824b979c8e

@@ -4,17 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    #! format: off
-    return quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-    #! format: on
-end
 
 # ╔═╡ 08acecf5-7c81-4c72-8dae-57a4ce2e3428
 begin
@@ -59,7 +48,7 @@ md"""
 """
 
 # ╔═╡ 605ac073-5b48-4882-bd9f-08a1acef3c85
-@bind N PlutoUI.Slider(0:100; default=30, show_value=N -> "Order : N=$N")
+N=30
 
 # ╔═╡ 77d844c9-48e8-48c1-af7b-6ce3c1ee8e91
 q = 1; nothing
@@ -67,7 +56,7 @@ q = 1; nothing
 # ╔═╡ a7850b12-9100-484d-93a1-2138c35c1a79
 begin
 	μ_ps = TaylorExpansionSeries{Float64}(:μ, [x], [1.5+x^2], [0])
-	compute_coefficients!(μ_ps, N)
+	compute_coefficients!(μ_ps, N+1)
 	μ = SymbolicSeries(μ_ps)
 end; nothing
 
@@ -130,7 +119,7 @@ md"""
 K_ps = PDESeries{Float64}(:K, [x,ξ], [0,0], unknowns, [BC1, BC2, PDE1, PDE2])
 
 # ╔═╡ 354c09a1-0883-4d85-a0d5-3dab6204525a
-compute_coefficients!(K_ps, N; verbose=0)
+compute_coefficients!(K_ps, N)
 
 # ╔═╡ e7889cc1-5bdb-46ae-ade5-559e652041d4
 md"""

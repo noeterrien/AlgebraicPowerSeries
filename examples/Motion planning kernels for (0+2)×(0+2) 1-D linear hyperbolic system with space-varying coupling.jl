@@ -133,9 +133,6 @@ L₂₂_res(ξ) = L_res[3,2](1, ξ)
 # ╔═╡ 69989d5e-84f0-4e4f-82a5-b4eba8177099
 L₂₁_other_res(x) = L_res[3,1](x, 0)
 
-# ╔═╡ 81d2c8b1-ee49-408f-b9e2-071f0b60535a
-
-
 # ╔═╡ d8acec43-d542-4026-93b9-dcfb14340c75
 md"""
 # Plot and display
@@ -192,7 +189,6 @@ display(fig)
 # ╠═8850e81a-a20c-432c-a1b3-cb60717c8853
 # ╠═6c353b73-7a47-48c5-8bb7-3cfce05c938a
 # ╠═69989d5e-84f0-4e4f-82a5-b4eba8177099
-# ╠═81d2c8b1-ee49-408f-b9e2-071f0b60535a
 # ╟─d8acec43-d542-4026-93b9-dcfb14340c75
 # ╠═598b18b4-5d99-4bbc-a4b3-a544fcd34e71
 # ╠═31922153-bee1-434a-a518-7b61938a2ad8

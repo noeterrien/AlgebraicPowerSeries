@@ -339,7 +339,6 @@ function extract_affine_transformation(eqs::Vector{Equation}, vars::Vector{Num},
                                      not linear"))
 
     A = T.(Symbolics.value.(A_sym))
-    @show b_sym
     b = T.(-Symbolics.value.(b_sym))
 
     A, b
