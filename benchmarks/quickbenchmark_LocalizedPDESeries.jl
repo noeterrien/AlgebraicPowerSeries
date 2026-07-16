@@ -96,18 +96,15 @@ function benchmark_with(T::Type, solver, solver_name::String)
 
     println("Computing coefficients with solver $solver_name and type $T:")
 
-    t1 = time()
-    compute_coefficients!(K_ps, maxOrder; solver=solver, benchmark=true)
-    t2 = time()
+    @time compute_coefficients!(K_ps, maxOrder; solver=solver, benchmark=true)
 
-    println("In total, took $(t2-t1) seconds")
     println()
 
 end
 
 ################################### Benchmark all solvers #################################
 
-redirect_stdio(stdout=isempty(save_to) ? stderr : "benchmarks/results/$save_to", 
+redirect_stdio(stdout=isempty(save_to) ? stdout : "benchmarks/results/$save_to", 
                stderr=devnull) do
 
     for (solver, solver_name, T) in zip(solvers, solver_names, types)

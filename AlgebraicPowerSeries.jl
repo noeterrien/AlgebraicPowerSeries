@@ -252,20 +252,8 @@ function Base.getindex(sss::ScalarSeriesSymbol, I::Vararg{Int})
     end
 end
 
-function Base.show(io::IO, sss::ScalarSeriesSymbol)
-    if sss.ps == :self
-        print(io, "ScalarSeriesSymbol refering to series :self at index ", sss.scalar_idx)
-    else
-        if sss.ps.order < 0
-            print(io, "ScalarSeriesSymbol refering to series ", sss.ps.seriesID, ". No coefficients computed yet")
-        else
-            monomials = compute_monomials(sss.ps.order, sss.ps.variables, sss.ps.center)
-            to_build = sum(sss.ps.coefficients[sss.scalar_idx...][1:length(monomials)] .* monomials)
-            print(io, "ScalarSeriesSymbol refering to series ", sss.ps.seriesID, " at index ", sss.scalar_idx,
-                      ". Computed coefficients are : ", to_build)
-        end
-    end
-end
+Base.show(io::IO, sss::ScalarSeriesSymbol) = print(io, "$(sss.ps isa Symbol ? sss.ps : sss.ps.seriesID)$(sss.scalar_idx)")
+
 
 """
     selfseries_symbols(size::Vararg{Int})
@@ -547,298 +535,13 @@ end
 
 #--------------------------------------------Series defined by Partial Differential Equations----------------------------------------------
 
-"""
-    getSymbolics(x)::Number
-
-    A function to retrieve the Symbolics representation of an object x. By default, assumes x isa
-    Number. Using this function, one gets the fully algebraic representation of x
-"""
-getSymbolics(x::Number)::Number = x
-getSymbolics(::Nothing) = nothing
-getSymbolics(sc::SeriesCoefficient)::Number = sc.unique_sym
-
-"""
-    getNum(x)::Number
-
-    A function to return the Number representing an object x. By default, assumes x isa
-    Number. Using this function, objects that can be evaluated numerically are evaluated
-    numerically
-"""
-getNum(x::Number)::Number = x
-getNum(::Nothing) = nothing
-function getNum(sc::SeriesCoefficient)::Number
-    if sc.ps != :self
-        if sc.ps.order < sc.indices[1]
-            throw(ArgumentError("Cannot evaluate a SeriesCoefficient at order above the \
-                                 currently computed order. Involved SeriesCoefficient : 
-                                 $sc"))
-        else
-            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
-        end
-    else
-        getSymbolics(sc)
-    end
-end
-
-
-
-############################ NlinearSeriesOperation ###########################
-"""
-    NlinearSeriesOperation
-
-    SymbolicSeries are constructed as trees of SymbolicSeries. branches of that tree can
-    be described as NlinearSeriesOperation. These operations correspond to the application
-    of a func over a Vector args of arguments that can be SymbolicSeries, Numbers, ...
-
-    ###Fields
-
-    - `func` -- The function used to aggregate all the arguments. Should take a vector as 
-      input.
-    - `args::Vector` -- The Vector of arguments
-    - `show` -- The method to be called by Base.show()
-
-    ###Example
-
-    - `NlinearSeriesOperation(func, args::Vector)` -- default constructor
-"""
-struct NlinearSeriesOperation
-    func
-    args::Vector
-    show
-end
-
-Base.show(io::IO, op::NlinearSeriesOperation) = print(io, op.show())
-
-"""
-    getSymbolics(op::NlinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the NlinearSeriesOperation
-    Only works if op is an operation on SymbolicSeries coefficients.
-"""
-function getSymbolics(op::NlinearSeriesOperation)::Number
-    to_aggregate = []
-    for arg in op.args
-        if arg isa ScalarSeriesSymbol
-            throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
-        else            
-            push!(to_aggregate, getSymbolics(arg))
-        end
-    end
-    getSymbolics(op.func(to_aggregate))
-end
-
-
-
-"""
-    getNum(op::NlinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the NlinearSeriesOperation
-    Only works if op is an operation on SymbolicSeries coefficients.
-
-    Using this function, objects that can be evaluated numerically are evaluated 
-    numerically
-"""
-function getNum(op::NlinearSeriesOperation)::Number
-    to_aggregate = []
-    for arg in op.args
-        if arg isa ScalarSeriesSymbol
-            throw(ArgumentError("Cannot get Symbolic expression of a ScalarSeriesSymbol."))
-        else
-            push!(to_aggregate, getNum(arg))
-        end
-    end
-    getNum(op.func(to_aggregate))
-end
-
-
-################################## MultilinearSeriesOperation ##############################
-"""
-    MultilinearSeriesOperation
-
-    SymbolicSeries are constructed as trees of SymbolicSeries. branches of that tree can
-    be described as MultilinearSeriesOperation. These operations correspond to
-    the application of a func over a range of arguments that is not necesarily defined at
-    the time of the construction of the tree.
-
-    ###Fiels
-
-    - `aggreg` -- The function used to aggregate all the arguments. Should take two elements
-      as input and make one
-    - `arg` -- A function that returns the arguments to be used when called on a number of
-      indices xᵢ. arg should return either a SeriesCoefficient, Numbers ... or an operation
-      (NlinearSeriesOperation or MultilinearSeriesOperation) on SeriesCoefficients, Numbers 
-      ... In particular, arg CANNOT return anything representing a Series.
-    - `arg_parameters::Vector` -- parameters to be passed to the arg function. If not
-      empty, arg should accept a named parameter `params`. If params can sometimes be
-      empty, add the default value `params=[]`
-    - `ranges::Vector{Tuple{Any, Any}}` -- The ranges between which the indices vary. i.e :
-      xᵢ ∈ aᵢ:bᵢ where ranges = [(aᵢ, bᵢ)...]
-    - `argNum2` -- Same as arg but should return the result of getNum2(arg(idcs...; params=arg_parameters), idx...; N). 
-      where idcs is an element of ranges. Since idx and N cannot be known at the time of constructing the operation, 
-      they must be passed to arg_parameters using :idxi and :∞ symbols
-    - `show` -- The method to be called by Base.show()
-
-    ###Example
-
-    - `MultilinearSeriesOperation(aggreg, 
-                                  arg, 
-                                  arg_parameters::Vector,
-                                  ranges::Vector{Tuple{Any, Any}},
-                                  argNum2,
-                                  show)` -- default constructor
-    - `MultilinearSeriesOperation(aggreg, 
-                                  arg,
-                                  ranges::Vector{Tuple{Any, Any}},
-                                  argNum2,
-                                  show)` -- constructor for 
-      MultilinearSeriesOperation with empty arg_parameters
-"""
-struct MultilinearSeriesOperation
-    aggreg
-    arg
-    arg_parameters::Vector
-    ranges::Vector{Tuple{Any, Any}}
-    argNum2
-    show
-end
-
-MultilinearSeriesOperation(aggreg, arg, ranges::Vector{Tuple{Any, Any}}, argNum2, show) = 
-    MultilinearSeriesOperation(aggreg, arg, [], ranges, argNum2, show)
-
-Base.show(io::IO, op::MultilinearSeriesOperation) = print(io, op.show())
-
-"""
-    getSymbolics(op::MultilinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the MultilinearSeriesOperation.
-    Only works if op is an operation on SymblicSeries coefficients.
-"""
-function getSymbolics(op::MultilinearSeriesOperation)::Number
-    rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
-    res = 0
-    for idcs in rngs
-        res = op.aggreg(res, getSymbolics(op.arg(Tuple(idcs)...; params=op.arg_parameters)))
-    end
-    res
-end
-
-"""
-    getNum(op::MultilinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the MultilinearSeriesOperation.
-    Only works if op is an operation on SymbolicSeries coefficients.
-
-    Using this function, objects that can be evaluated numerically are evaluated 
-    numerically
-"""
-function getNum(op::MultilinearSeriesOperation)::Number
-    rngs = CartesianIndices(tuple(map(r -> r[1]:r[2], op.ranges)...))
-    res = 0
-    for idcs in rngs
-        res = op.aggreg(res, getNum(op.arg(Tuple(idcs)...; params=op.arg_parameters)))
-    end
-    res
-end
-
-##############################TruncatedMultilinearSeriesOperation#########################
-"""
-    TruncatedMultilinearSeriesOperation
-
-    TruncatedMultilinearSeriesOperation work similarly to MultilinearSeriesOperation
-    but represent operations between an infinite number of terms, that have to be truncated
-    at some order
-
-    ###Fields
-
-    - `aggreg` -- The function used to aggregate the terms of the operation. Must take two
-      arguments and return one that can be reused by the function afterwards
-    - `arg` -- The function used to generate the terms of the operation. Will be called
-      with every possible index idx between start ∈ starts and +∞ (or rather the given
-      truncation order). Must accept a named argument `params`
-    - `arg_parameters::Vector` -- A vector of additionnal parameters that are passed to
-      `arg` as the `params` named argument
-    - `starts::Vector` -- The indices at which the indices should start
-    - `maxOrder::Int` -- The order up to which these indices should go (can only be set by
-      the getindex function and should be set to -1 by default)
-    - `argNum2` -- Same as arg but should return the result of getNum2(arg(idcs...; params=arg_parameters), idx...; N). 
-      where idcs is an element of ranges. Since idx and N cannot be known at the time of constructing the operation, 
-      they must be passed to arg_parameters using :idxi and :∞ symbols
-    - `fixedidcs::Vector{Int}` -- When the series' coefficients has index idx1, idx2, ..., what is the index of these
-      indices in the arg_parameters list (the others will vary between starts and maximum order)
-    - `show` -- The method to be called by Base.show()
-
-    ###Examples
-
-    - `TruncatedMultilinearSeriesOperation(aggreg, 
-                                           arg, 
-                                           arg_parameters::Vector, 
-                                           starts::Vector,
-                                           argNum2,
-                                           fixedidcs::Vector{Int},
-                                           show)` -- default constructor
-"""
-struct TruncatedMultilinearSeriesOperation
-    aggreg
-    arg
-    arg_parameters::Vector
-    starts::Vector
-    maxOrder::Int
-    argNum2
-    fixedidcs::Vector{Int}
-    show
-end
-
-TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters::Vector, starts::Vector, argNum2, fixedidcs::Vector{Int}, show) =
-    TruncatedMultilinearSeriesOperation(aggreg, arg, arg_parameters, starts, -1, argNum2, fixedidcs::Vector{Int}, show)
-
-Base.show(io::IO, op::TruncatedMultilinearSeriesOperation) = print(io, op.show())
-
-"""
-    getSymbolics(op::TruncatedMultilinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the TruncatedMultilinearSeriesOperation.
-    Only works if op is an operation on SymbolicSeries coefficients.
-"""
-function getSymbolics(op::TruncatedMultilinearSeriesOperation)::Number
-    if op.maxOrder == -1
-        throw("Cannot getSymbolic of a TruncatedMultilinearSeriesOperation that does not
-               have a maxOrder")
-    else
-        apply_with_fullsym_indices_from_and_upto((k...) -> getSymbolics(op.arg(k...; params=op.arg_parameters)), 
-                                                 op.aggreg,
-                                                 op.maxOrder,
-                                                 op.starts...)
-    end
-end
-
-"""
-    getNum(op::TruncatedMultilinearSeriesOperation)::Number
-
-    Returns the Symbolics.Num expression representing the TruncatedMultilinearSeriesOperation.
-    Only works if op is an operation on SymbolicSeries coefficients.
-
-    Using this function, objects that can be evaluated numerically are evaluated 
-    numerically
-"""
-function getNum(op::TruncatedMultilinearSeriesOperation)::Number
-    if op.maxOrder == -1
-        throw("Cannot getNum of a TruncatedMultilinearSeriesOperation that does not
-               have a maxOrder")
-    else
-        apply_with_fullsym_indices_from_and_upto((k...) -> getNum(op.arg(k...; params=op.arg_parameters)), 
-                                                 op.aggreg,
-                                                 op.maxOrder,
-                                                 op.starts...)
-    end
-end
-
 ##################################### SymbolicSeries #####################################
 """
     {SymbolicSeries}{D}
 
     A representation of a series of D variables : ∑aᵢⱼₖxⁱyʲzᵏ for a 3 variables series.
-    Throughout the tree of SymbolicSeries, the indices of the current node can be referred
-    to as :idx1, :idx2, ..., :idxD.
+    SymbolicSeries are represented as a tree. The nodes of that tree are SymbolicSeries and
+    the leaves may be ScalarSeriesSymbol or Numbers.
 
     WARNING : The indexation convention is different from the convention used before.
               Indeed, to decide up to which order a series coefficient should be computed,
@@ -849,18 +552,14 @@ end
 
     ### Fields
 
-    - `ref::Union{ScalarSeriesSymbol, 
-                  NlinearSeriesOperation,
-                  MultilinearSeriesOperation,
-                  TruncatedMultilinearSeriesOperation}` -- How are each coefficients defined.
-      SymbolicSeries are represented as trees where SymbolicSeries are the nodes, 
-      NlinearSeriesOperation, MultilinearSeriesOperation and TruncatedMultilinearSeriesOperation
-      are the branches, and ScalarSeriesSymbol are the leaves (leaves may also be other objects such as 
-      Numbers)
     - `center::Vector` -- A vector of length D which represents the center 
       around which the series should be computed when needed. Its component can be set two 
       :unspecified in which case if operations happen between this SymbolicSeries and
       another one, the other series specified center component will be used in priority
+    - `getNum` -- A function which retrieves the numerical value of the series coefficient
+      for a given index `idx::Vararg{Int}` and truncation order N. Its signature should be
+      `getNum(idx::Vararg{Int, D}; N)`. If N is not mandatory, its default value should be 
+      set to `nothing`
     - `get_selfseries_coefficients` -- A function which, given a Vararg{Int, D} returns the
       SeriesCoefficients that refer to series :self that appear when computing the
       coefficient of that series at this index. The return value should be a 
@@ -870,16 +569,16 @@ end
     - `contains_selfseries::Int` -- Whether or not the SymbolicSeries' tree refers to the
       series :self at one point. If set to 0, it does not, if set to 1 it does, and if set
       to more than 1, then it refers to some derivatives of the series :self
+    - `show` -- A function which is used to display the SymbolicSeries. Its signature
+      should be `show()::String`
 
     ### Examples
 
-    - `SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
-                                 NlinearSeriesOperation, 
-                                 MultilinearSeriesOperation,
-                                 TruncatedMultilinearSeriesOperation}, 
+    - `SymbolicSeries(getNum, 
                       center::Vector,
                       get_selfseries_coefficients,
-                      contains_selfseries::Int)` -- default constructor
+                      contains_selfseries::Int,
+                      show)` -- default constructor
     - `SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)` -- Creates a SymbolicSeries
       from a ScalarSeriesSymbol
     - `SymbolicSeries(a::Array{ScalarSeriesSymbol}, center::Vector)::Array{SymbolicSeries}` 
@@ -892,32 +591,43 @@ end
 
 """
 struct SymbolicSeries{D}
-    ref::Union{ScalarSeriesSymbol, NlinearSeriesOperation, MultilinearSeriesOperation, TruncatedMultilinearSeriesOperation}
     center::Vector
+    getNum
     get_selfseries_coefficients
     contains_selfseries::Int
+    show
 
-    SymbolicSeries(ref::Union{ScalarSeriesSymbol, 
-                              NlinearSeriesOperation,
-                              MultilinearSeriesOperation,
-                              TruncatedMultilinearSeriesOperation},
-                   center::Vector,
-                   get_selfseries_coefficients,
-                   contains_selfseries::Int) = new{length(center)}(ref, 
-                                                                    center, 
-                                                                    get_selfseries_coefficients, 
-                                                                    contains_selfseries)
+    function SymbolicSeries(center::Vector, getNum, get_selfseries_coefficients,
+                            contains_selfseries::Int, show) 
+        new{length(center)}(center, getNum, get_selfseries_coefficients, contains_selfseries, show)
+    end
 end
 
+#### Useful function when defining SymbolicSeries
+get_selfseries_coefficients_none(::Int...; N=nothing) = Set()
+
+
 function SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)
+
+    getNum(I::Vararg{Int}; N=nothing) = cached_getNum(sss, I...; N)
+    show() = "$(sss)"
+
     if sss.ps != :self
-        get_selfseries_coefficients1(I::Vararg{Int}; N=nothing) = Set()
-        SymbolicSeries(sss, center, get_selfseries_coefficients1, 0)
+        SymbolicSeries(center, getNum, get_selfseries_coefficients_none, 0, show)
+
     elseif sss.ps == :self
-        get_selfseries_coefficients2(I::Vararg{Int}; N=nothing) = sss[convertIndices_fullsym_to_trunc(I...)...].ps == :self ? 
-                                                                  Set([sss[convertIndices_fullsym_to_trunc(I...)...]]) : 
-                                                                  Set()
-        SymbolicSeries(sss, center, get_selfseries_coefficients2, 1)
+
+        function get_selfseries_coefficients(I::Vararg{Int}; N=nothing) 
+            sc = sss[convertIndices_fullsym_to_trunc(I...)...]
+            if sc.ps == :self # check in case it has been moved to a PDESeries
+                Set([sc])
+            else 
+                Set()
+            end
+        end
+
+        SymbolicSeries(center, getNum, get_selfseries_coefficients, 1, show)
+
     else
         throw(ArgumentError("Unknown symbol : $(sss.ps)"))
     end
@@ -934,132 +644,17 @@ function SymbolicSeries(ps::PowerSeries)
 end
 
 # used for addition of constants
-SymbolicSeries{D}(x::Number) where D = SymbolicSeries(NlinearSeriesOperation(v -> all(==(0), v) ? x : 0, generate_index_list(D), () -> "$x"), fill(:unspecified, D), (I::Vararg{Int, D}; N=nothing) -> Set(), 0)
+function SymbolicSeries{D}(x::Number) where D
+    getNum(I::Int...; N=nothing) = all(==(0), I) ? x : 0
+    show(I::Int...; N=nothing) = "$x"
+
+    SymbolicSeries(fill(:unspecified, D), getNum, get_selfseries_coefficients_none, 0, show)
+end
 Base.convert(::Type{SymbolicSeries{D}}, x::Number) where D = SymbolicSeries{D}(x)
 
-function Base.show(io::IO, s::SymbolicSeries)
-    if s.ref isa ScalarSeriesSymbol
-        if s.ref.ps isa PowerSeries
-            print(io, "$(s.ref.ps.seriesID)$([s.ref.scalar_idx]...)")
-        else 
-            print(io, "$(s.ref.ps)$([s.ref.scalar_idx...])")
-        end
-    else
-        print(io, s.ref)
-    end
-end
+Base.show(io::IO, s::SymbolicSeries) = print(io, s.show())
 
-"""
-    Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}) where D
-
-    Returns a tree corresponding to the expression of the coefficient of s that has index
-    args. This time, the nodes of the tree are NlinearSeriesOperations and 
-    MultilinearSeriesOperations while the leaves are SeriesCoefficients.
-
-    Named optionnal argument `N` is the truncation order when the coefficient expression
-    must be truncated (i.e, some Symbol :∞ appears)
-
-    ###Notes
-    The actions performed by getindex on the SymbolicSeries tree are the following : 
-    - substitutes ScalarSeriesSymbol with the SeriesCoefficient that corresponds to the given index
-    - substitutes symbols :idx1, :idx2, ... with their corresponding values
-    - substitutes SymbolicSeries with a call to getindex at the same index
-    - applies the same operations recursively on NlinearSeriesOperation and MultilinearSeriesOperation
-"""
-function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) where D
-
-    # truncation
-    if !(isnothing(N)) && D > 0 && +(args...) > N
-        return 0
-    end
-
-    # substitution
-    idx_subst = Dict{Symbol, Union{Int, Nothing}}([Symbol("idx$i") => v for (i,v) in enumerate(args)])
-    idx_subst[:∞] = N
-
-    substitution2(t) = (substitution(t[1]), substitution(t[2]))
-    function substitution(arg)
-        if arg isa ScalarSeriesSymbol 
-            arg[convertIndices_fullsym_to_trunc(args...)...]
-        elseif arg isa SymbolicSeries
-            arg[args..., N=N]
-        elseif arg isa NlinearSeriesOperation
-            NlinearSeriesOperation(arg.func, map(substitution, arg.args), arg.show)
-        elseif arg isa MultilinearSeriesOperation
-            MultilinearSeriesOperation(arg.aggreg, 
-                               arg.arg, 
-                               substitution.(arg.arg_parameters), 
-                               substitution2.(arg.ranges),
-                               arg.argNum2,
-                               arg.show)
-        elseif arg isa TruncatedMultilinearSeriesOperation
-            isnothing(N) && throw(ArgumentError("Trying to getindex of a SymbolicSeries \
-                                                 that depends on a TruncatedMultilinearSeriesOperation \
-                                                 without giving named argument `N`"))
-            TruncatedMultilinearSeriesOperation(arg.aggreg, 
-                                                arg.arg,
-                                                substitution.(arg.arg_parameters),
-                                                substitution.(arg.starts),
-                                                N,
-                                                arg.argNum2,
-                                                arg.fixedidcs,
-                                                arg.show)
-        elseif arg in keys(idx_subst)
-            idx_subst[arg]
-        else
-            arg
-        end
-    end
-        
-    substitution(s.ref)
-end
-
-
-"""
-    getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D
-
-    Returns the Symbolics expression of the coefficient of s at index idx
-
-    ###Input
-
-    - `s::SymbolicSeries{D}` -- A D-variables SymbolicSeries
-    - `idx::Vararg{Int, D}` -- The index of the coefficient for which Symbolics expression
-      should be computed
-
-    ###Output
-
-    The expression of the coefficient of s at index idx
-
-    ###Note
-
-    This is equivalent to getSymbolics(s[idx])
-"""
-getSymbolics(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D = getSymbolics(s[idx...])
-
-
-"""
-    getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}) where D
-
-    Returns the Symbolics expression of the coefficient of s at index idx. Terms that can be
-    evaluated numerically are evaluated numerically.
-
-    ###Input
-
-    - `s::SymbolicSeries{D}` -- A D-variables SymbolicSeries
-    - `idx::Vararg{Int, D}` -- The index of the coefficient for which Symbolics expression
-      should be computed
-
-    ###Output
-
-    The expression of the coefficient of s at index idx
-
-    ###Note
-
-    This is equivalent to getNum(s[idx])
-"""
-getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = getNum(s[idx..., N=N])
-
-Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries(NlinearSeriesOperation(x -> 0, [], () -> 0), zeros(D), (I::Vararg{Int, D}; N=nothing) -> Set(), 0)
+Base.zero(::Type{SymbolicSeries{D}}) where D = SymbolicSeries{D}(0)
 Base.zero(::SymbolicSeries{D}) where D = Base.zero(SymbolicSeries{D})
 
 
@@ -1113,76 +708,54 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
     # ensure that at least one center component has to be translated
     any(is_center_comp_trans) || return s
 
-    function arg(k::Vararg{Int}; params=[])
-        binoms = 1
-        coeff_idx = []
-        centers = 1
-        implied_idx = 1
-        for (i, is_implied, new_c, c) in 
-            zip(1:D, is_center_comp_trans, new_center, s.center)
-
-            if is_implied
-                binoms *= dynamic_binomial(k[implied_idx], params[i])
-                push!(coeff_idx, k[implied_idx])
-                centers *= (new_c-c)^(k[implied_idx]-params[i])
-                implied_idx += 1
-            else
-                push!(coeff_idx, params[i])
+    function getNum(I::Vararg{Int, D}; N)
+        function getNum_aux(k::Int...)
+            binoms = 1
+            coeff_idx = []
+            centers = 1
+            implied_idx = 1
+            for (i, is_implied, new_c, c) in 
+                zip(1:D, is_center_comp_trans, new_center, s.center)
+                if is_implied
+                    binoms *= dynamic_binomial(k[implied_idx], I[i])
+                    push!(coeff_idx, k[implied_idx])
+                    centers *= (new_c-c)^(k[implied_idx]-I[i])
+                    implied_idx += 1
+                else
+                    push!(coeff_idx, I[i])
+                end
             end
-
+            binoms*cached_getNum(s, coeff_idx...; N)*centers
         end
-        NlinearSeriesOperation(v -> v[1]*v[2]*v[3], [binoms, 
-                                                     s[coeff_idx..., N=params[end]], 
-                                                     centers],
-                               () -> "")
+
+        fixed_idcs = I[.!(is_center_comp_trans)]
+        fixed_idcs_order = isempty(fixed_idcs) ? 0 : sum(fixed_idcs)
+        apply_with_fullsym_indices_from_and_upto(getNum_aux, +, N-fixed_idcs_order, I[is_center_comp_trans]...)
     end
 
-    function argNum2(k::Vararg{Int}; params=[])
-        binoms = 1
-        coeff_idx = []
-        centers = 1
-        implied_idx = 1
-        for (i, is_implied, new_c, c) in 
-            zip(1:D, is_center_comp_trans, new_center, s.center)
 
-            if is_implied
-                binoms *= dynamic_binomial(k[implied_idx], params[i])
-                push!(coeff_idx, k[implied_idx])
-                centers *= (new_c-c)^(k[implied_idx]-params[i])
-                implied_idx += 1
-            else
-                push!(coeff_idx, params[i])
+    function get_selfseries_coefficients(I::Vararg{Int, D}; N)
+        function get_selfseries_coefficients_aux(k::Int...)
+            coeff_idx = Vector{Int}(undef, D)
+            implied_idx = 1
+            for (idx, i, is_implied) in zip(1:D, I, is_center_comp_trans)
+                if is_implied
+                    coeff_idx[idx] = k[implied_idx]
+                    implied_idx += 1
+                else
+                    coeff_idx[idx] = i
+                end
             end
-
+            s.get_selfseries_coefficients(coeff_idx...; N=N)
         end
-        binoms*cached_getNum(s, coeff_idx...; N=params[end])*centers
-    end
-    
-    idcs = generate_index_list(D)
-    op = TruncatedMultilinearSeriesOperation(+, arg, [idcs; :∞], idcs[is_center_comp_trans], argNum2, findall(.!(is_center_comp_trans)),
-                                             () -> " ($s at $(s.center) => $new_center) ")
 
-    function get_at_given_idx(I::NTuple{D, Int}, k::Vararg{Int}; N)
-        coeff_idx = Vector{Int}(undef, D)
-        implied_idx = 1
-        for (idx, i, is_implied) in zip(1:D, I, is_center_comp_trans)
-            if is_implied
-                coeff_idx[idx] = k[implied_idx]
-                implied_idx += 1
-            else
-                coeff_idx[idx] = i
-            end
-        end
-        s.get_selfseries_coefficients(coeff_idx...; N=N)
-    end
-
-    get_selfseries_coefficients(I::Vararg{Int, D}; N) =
-        apply_with_fullsym_indices_from_and_upto(k::Vararg{Int} -> get_at_given_idx(I, k...; N=N),
+        apply_with_fullsym_indices_from_and_upto(get_selfseries_coefficients_aux,
                                                  union,
                                                  N-sum(I[.!(is_center_comp_trans)]),
                                                  I[is_center_comp_trans]...)
+    end
 
-    SymbolicSeries(op, res_center, get_selfseries_coefficients, s.contains_selfseries)
+    SymbolicSeries(res_center, getNum, get_selfseries_coefficients, s.contains_selfseries, s.show)
 end
 
 """
@@ -1217,8 +790,8 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
 
     end
 
-    new_s1 = SymbolicSeries(s1.ref, new_center1, s1.get_selfseries_coefficients, s1.contains_selfseries)
-    new_s2 = SymbolicSeries(s2.ref, new_center2, s2.get_selfseries_coefficients, s2.contains_selfseries)
+    new_s1 = SymbolicSeries(new_center1, s1.getNum, s1.get_selfseries_coefficients, s1.contains_selfseries, s1.show)
+    new_s2 = SymbolicSeries(new_center2, s2.getNum, s2.get_selfseries_coefficients, s2.contains_selfseries, s2.show)
 
     if isequal(new_center1, new_center2) 
         (new_s1, new_s2)
@@ -1294,16 +867,17 @@ end
     If s(x,y) = ∑ᵢ,ⱼ sᵢⱼ xⁱyʲ, then shift(s, (1,2))(x,y) = ∑ᵢ,ⱼ s₍ᵢ₊₁₎₍ⱼ₊₂₎ xⁱyʲ
 """
 function shift(s::SymbolicSeries{D}, by::NTuple{D, Int}) where D
+
     order_decrease = sum(by)
-    op = NlinearSeriesOperation(v -> s[[v[i]+by[i] for i in 1:D]..., 
-                                     N=isnothing(v[end]) ? nothing : v[end]-order_decrease],
-                                [generate_index_list(D); :∞], () -> "($s)↑$by")
+    
+    getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s, (I.+by)...; N = isnothing(N) ? nothing : N-order_decrease)
 
-    get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) = 
-        s.get_selfseries_coefficients((idx .+ by)...; 
-                                      N=isnothing(N) ? nothing : N-order_decrease)
+    get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) =
+        s.get_selfseries_coefficients((I .+ by)...; N=isnothing(N) ? nothing : N-order_decrease)
 
-    SymbolicSeries(op, s.center, get_selfseries_coefficients, s.contains_selfseries)
+    show() = "($s)↑$by"
+
+    SymbolicSeries(s.center, getNum, get_selfseries_coefficients, s.contains_selfseries, show)
 end
 
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
@@ -1313,33 +887,47 @@ function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
         return new_s1 + new_s2
     end
 
-    op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2], () -> "($s1 + $s2)")
+    getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s1, I...; N) + cached_getNum(s2, I...; N)
+
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
         s1.get_selfseries_coefficients(I...; N) ∪ s2.get_selfseries_coefficients(I...; N)
-    SymbolicSeries(op, s1.center,  get_selfseries_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
+
+    show() = "($s1 + $s2)"
+
+    SymbolicSeries(s1.center, getNum, get_selfseries_coefficients, 
+                   max(s1.contains_selfseries, s2.contains_selfseries), show)
 end
 
 function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? 
-                                NlinearSeriesOperation(v -> v[1] + v[2], [s[v[1:D]..., N=v[end]], c[N=v[end]]], () -> "") : 
-                                s[v[1:D]..., N=v[end]],
-                                [generate_index_list(D); :∞], () -> "($s + $c)")
-    function get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing)
-        if all(==(0), idx) && isequal(cached_getNum(c), cached_getNum(s, idx...))
+    getNum(I::Vararg{Int, D}; N=nothing) = 
+        all(==(0), I) ? cached_getNum(s, I...; N) + cached_getNum(c; N) : cached_getNum(s, I...; N)
+
+    function get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing)
+        if all(==(0), I) && isequal(-cached_getNum(c; N), cached_getNum(s, I...; N))
             Set()
         else
-            s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
+            s.get_selfseries_coefficients(I...; N) ∪ c.get_selfseries_coefficients(N)
         end
     end
-    SymbolicSeries(op, s.center, get_selfseries_coefficients, s.contains_selfseries)
+
+    show() = "($s + $c)"
+
+    SymbolicSeries(s.center, getNum, get_selfseries_coefficients, 
+                   max(s.contains_selfseries, c.contains_selfseries), show)
 end
 Base.:+(c::SymbolicSeries{0}, s::SymbolicSeries) = s+c
 
 function Base.:+(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
-    op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2], () -> "($s1 + $s2)")
-    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(;N)∪s2.get_selfseries_coefficients(;N)
-    SymbolicSeries(op, [], get_selfseries_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
+
+    getNum(;N=nothing) = cached_getNum(s1; N) + cached_getNum(s2; N)
+
+    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(;N) ∪ s2.get_selfseries_coefficients(;N)
+
+    show() = "($s1 + $s2)"
+
+    SymbolicSeries([], getNum, get_selfseries_coefficients, 
+                   max(s1.contains_selfseries, s2.contains_selfseries), show)
 end
 
 Base.:+(s::SymbolicSeries, x::Number) = s + SymbolicSeries{0}(x)
@@ -1352,34 +940,50 @@ function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
         return new_s1 - new_s2
     end
 
-    op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2], () -> "($s1 - $s2)")
+    getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s1, I...; N) - cached_getNum(s2, I...; N)
+
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
         s1.get_selfseries_coefficients(I...; N) ∪ s2.get_selfseries_coefficients(I...; N)
-    SymbolicSeries(op, s1.center, get_selfseries_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
-end
 
+    show() = "($s1 - $s2)"
+
+    SymbolicSeries(s1.center, getNum, get_selfseries_coefficients, 
+                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+end
 
 function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[1:D]) ? 
-                                NlinearSeriesOperation(v -> v[1] - v[2], [s[v[1:D]..., N=v[end]], c[N=v[end]]], () -> "") : 
-                                s[v[1:D]..., N=v[end]],
-                                [generate_index_list(D); :∞], () -> "($s - $c)")
-    function get_selfseries_coefficients(idx::Vararg{Int, D}; N=nothing) 
-        if all(==(0), idx) && isequal(cached_getNum(c), cached_getNum(s, idx...))
+    function getNum(I::Vararg{Int, D}; N=nothing)
+        all(==(0), I) ? cached_getNum(s, I...; N) - cached_getNum(c; N) : cached_getNum(s, I...; N)
+    end
+
+    function get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing)
+        if all(==(0), I) && isequal(cached_getNum(c; N), cached_getNum(s, I...; N))
             Set()
         else
-            s.get_selfseries_coefficients(idx...; N=N) ∪ c.get_selfseries_coefficients(N=N)
+            s.get_selfseries_coefficients(I...; N) ∪ c.get_selfseries_coefficients(N)
         end
     end
-    SymbolicSeries(op, s.center, get_selfseries_coefficients, s.contains_selfseries)
+
+    show() = "($s - $c)"
+
+    SymbolicSeries(s.center, getNum, get_selfseries_coefficients, 
+                   max(s.contains_selfseries, c.contains_selfseries), show)
 end
 Base.:-(c::SymbolicSeries{0}, s::SymbolicSeries) = s-c
 
 function Base.:-(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
-    op = NlinearSeriesOperation(v -> v[1] - v[2], [s1, s2], () -> "($s1 - $s2)")
-    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(;N)∪s2.get_selfseries_coefficients(;N)
-    SymbolicSeries(op, [], get_selfseries_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
+
+    function getNum(;N=nothing)
+        cached_getNum(s1 ;N) - cached_getNum(s2 ;N)
+    end
+
+    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(N) ∪ s2.get_selfseries_coefficients(N)
+
+    show() = "($s1 - $s2)"
+
+    SymbolicSeries([], getNum, get_selfseries_coefficients, 
+                   max(s1.contains_selfseries, s2.contains_selfseries), show)
 end
 
 Base.:-(s::SymbolicSeries, x::Number) = s - SymbolicSeries{0}(x)
@@ -1395,8 +999,9 @@ Base.:-(x::Number, s::SymbolicSeries) = SymbolicSeries{0}(x) - s
     will lead to unexpected results.
 """
 function Base.:*(t::Number, s::SymbolicSeries)
-    op = NlinearSeriesOperation(v -> v[1]*v[2], [t, s], () -> "($t * $s)")
-    SymbolicSeries(op, s.center, s.get_selfseries_coefficients, s.contains_selfseries)
+    getNum(I::Int...; N=nothing) = t*cached_getNum(s, I...; N)
+    show() = "($t * $s)"
+    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show)
 end
 """
     Base.:*(s::SymbolicSeries, t::Number)
@@ -1420,8 +1025,9 @@ Base.:-(s::SymbolicSeries) = -1*s
     will lead to unexpected results.
 """
 function Base.:/(s::SymbolicSeries, t::Number)
-    op = NlinearSeriesOperation(v -> v[1]/v[2], [s, t], () -> "($s / $t)")
-    SymbolicSeries(op, s.center, s.get_selfseries_coefficients, s.contains_selfseries)
+    getNum(I::Int...; N=nothing) = cached_getNum(s, I...; N) / t
+    show() = "($s / $t)"
+    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show)
 end
 
 function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
@@ -1431,16 +1037,13 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
         return new_s1 * new_s2
     end
 
-    arg(I::Vararg; params=[]) = NlinearSeriesOperation(v -> v[1]*v[2],
-                                                       [s1[I..., N=params[end]], 
-                                                        s2[(params[1:D].-I)..., N=params[end]]
-                                                       ], () -> "")
-
-    argNum2(I::Vararg; params=[]) = cached_getNum(s1, I...; N=params[end])*cached_getNum(s2, (params[1:D].-I)...; N=params[end])
-
-    op = MultilinearSeriesOperation(+, arg, [generate_index_list(D); :∞], [(0, Symbol("idx$i")) for i in 1:D], argNum2, () -> "($s1 * $s2)")
-
-
+    function getNum(I::Vararg{Int, D}; N=nothing)
+        res = 0
+        for idx in CartesianIndices(tuple([0:i for i in I]...))
+            res += cached_getNum(s1, Tuple(idx)...; N)*cached_getNum(s2, (I .- Tuple(idx))...; N)
+        end
+        res
+    end
 
     function get_self_series_coefficients(I::Vararg{Int, D}; N=nothing)
         ranges = CartesianIndices(tuple([0:i for i in I]...))
@@ -1456,7 +1059,10 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
         res
     end
 
-    SymbolicSeries(op, s1.center, get_self_series_coefficients, max(s1.contains_selfseries, s2.contains_selfseries))
+    show() = "($s1 * $s2)"
+
+    SymbolicSeries(s1.center, getNum, get_self_series_coefficients, 
+                   max(s1.contains_selfseries, s2.contains_selfseries), show)
 
 end
 
@@ -1520,12 +1126,6 @@ end
 
 Base.show(io::IO, ess::EvaluatedSymbolicSeries) = print(io, "$(ess.series)($(["$v," for v in ess.variables]...))")
 
-"""
-    getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}; N=nothing) where D
-
-    Same as ess.series[I..., N=N]
-"""
-Base.getindex(ess::EvaluatedSymbolicSeries{D}, I::Vararg{Int, D}; N=nothing) where D = ess.series[I..., N=N]
 
 Base.zero(ess::EvaluatedSymbolicSeries) = Base.zero(ess.series)(ess.variables...)
 
@@ -1553,14 +1153,12 @@ function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     
     perm = [new_vars_idx[var] for var in s.variables]
 
-
-    op = NlinearSeriesOperation(v -> s[v[perm]..., N=v[end]], 
-                                [generate_index_list(D); :∞], () -> "$s(($s.variables) ↔ $new_vars)")
+    getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s, I[perm]...; N)
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-        s.series.get_selfseries_coefficients(I[perm]..., N=N)
+        s.series.get_selfseries_coefficients(I[perm]...; N)
 
-    SymbolicSeries(op, new_center, get_selfseries_coefficients, s.series.contains_selfseries)(new_vars...)
+    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
 end
 
 
@@ -1577,13 +1175,12 @@ function union_variables(s::EvaluatedSymbolicSeries{D1}, vars::Vector) where D1
 
     new_center = [s.series.center; fill(:unspecified, D-D1)]
 
-    op = NlinearSeriesOperation(v -> all(==(0), v[D1+1:D]) ? s[v[1:D1]..., N=v[end]] : 0, 
-                                [generate_index_list(D); :∞], () -> "$s(($s.variables) → $vars)")
+    getNum(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? cached_getNum(s, I[1:D1]...; N) : 0
 
     get_selfseries_coefficients(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? 
         s.series.get_selfseries_coefficients(I[1:D1]...; N=N) : Set()
 
-    SymbolicSeries(op, new_center, get_selfseries_coefficients, s.series.contains_selfseries)(new_vars...)
+    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
 end
 
 
@@ -1705,24 +1302,23 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
 
     # find variable index
     x_idx = findfirst(v -> isequal(v, d.x), s.variables)
-    
-    # create index
-    index = generate_index_list(D)
 
     # handle differentiation at order greater than 1
     new_s = d.order == 1 ? s : Differential(d.x, d.order-1)(s)
     
-    op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1]*v[2], 
-                                                            [(u[x_idx]+1), 
-                                                             new_s.series[u[1:(x_idx-1)]..., u[x_idx]+1, u[(x_idx+1):D]..., N=(isnothing(u[end]) ? nothing : u[end]+1)]], () -> "")
-                                , [index; :∞], () -> "∂($d.x)($s)")
-    
+    getNum(I::Vararg{Int, D}; N=nothing) = (I[x_idx] + 1)*cached_getNum(new_s.series, 
+                                                                        I[1:(x_idx-1)]..., I[x_idx]+1, I[(x_idx+1):D]...; 
+                                                                        N=isnothing(N) ? nothing : N+1)
+
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = new_s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N+1))
-    EvaluatedSymbolicSeries(SymbolicSeries(op, 
-                                           new_s.series.center, 
-                                           get_selfseries_coefficients, 
-                                           s.series.contains_selfseries ≥ 1 ? 2 : 0
-                            ), new_s.variables)
+    
+    show() = "∂$(d.x)($s)"
+
+    EvaluatedSymbolicSeries(SymbolicSeries(new_s.series.center, getNum, get_selfseries_coefficients, 
+                                           s.series.contains_selfseries ≥ 1 ? 2 : 0, show), 
+                            new_s.variables)
+
+                    
 
 
 end
@@ -1742,20 +1338,20 @@ function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
     # find variable index
     x_idx = findfirst(v -> isequal(v, x), s.variables)
 
-    # create index
-    index = generate_index_list(D)
+    function getNum(I::Vararg{Int, D}; N=nothing) 
 
-
-
-    op = NlinearSeriesOperation(u -> NlinearSeriesOperation(v -> v[1] == 0 ? 0 : v[2]/v[1], 
-                                                            [u[x_idx],
-                                                             u[x_idx] == 0 ? 0 :  
-                                                             s.series[u[1:(x_idx-1)]..., u[x_idx]-1, u[(x_idx+1):end-1]...,N=(isnothing(u[end]) ? nothing : u[end]-1)]
-                                                            ], () -> "")
-                                , [index; :∞], () -> "∫ ($s) d$x")
+        I[x_idx] == 0 ? 0 : cached_getNum(s.series, 
+                                          I[1:(x_idx-1)]..., I[x_idx]-1, I[(x_idx+1):D]...; 
+                                          N=isnothing(N) ? nothing : N-1) / I[x_idx]
+    end
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N-1))
-    EvaluatedSymbolicSeries(SymbolicSeries(op, s.series.center, get_selfseries_coefficients, s.series.contains_selfseries), s.variables)
+    
+    show() = "∫ ($s) d$x"
+
+    EvaluatedSymbolicSeries(SymbolicSeries(s.series.center, getNum, get_selfseries_coefficients, 
+                                           s.series.contains_selfseries, show), 
+                            s.variables)
 
 end
 ∫(a::Array{<:EvaluatedSymbolicSeries}, x) = map(s -> ∫(s, x), a)
@@ -1793,11 +1389,9 @@ end
 """
     UnexpandedEvaluatedSymbolicSeries
 
-    Similar to NlinearSeriesOperation, MultilinearSeriesOperation, or 
-    TruncatedMultilinearSeriesOperation on SeriesCoefficients or ScalarSeriesSymbol,
-    this is a wrapper for operations on EvaluatedSymbolicSeries, allowing the operation to
-    not be expanded when writing the operation and instead, to be expanded later when
-    calling the `expand` function.
+    Similar SymbolicSeries, this is a wrapper for operations on EvaluatedSymbolicSeries, 
+    allowing the operation to not be expanded when writing the operation and instead, 
+    to be expanded later when calling the `expand` function.
 
     Its use is for instance relevant when composing power series, where the result will be 
     a truncated sum of powers of series, but the truncation order can only be known when 
@@ -1912,13 +1506,6 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                     s.center[other_x] == :unspecified || 
                     s.center[x_idx] == :unspecified) # the center components match => allow use of PDESeries
 
-                    arg1(idx::Int; params) = s[params[1:other_x-1]..., 
-                                              params[other_x]-idx, 
-                                              params[other_x+1:x_idx-1]..., 
-                                              idx, 
-                                              params[x_idx:end-1]...,
-                                              N=params[end]]
-
                     argNum2_1(idx::Int; params) = cached_getNum(s, params[1:other_x-1]..., 
                                                           params[other_x]-idx, 
                                                           params[other_x+1:x_idx-1]..., 
@@ -1926,7 +1513,15 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                                                           params[x_idx:end-1]...; 
                                                           N=params[end])
 
-                    op = MultilinearSeriesOperation(+, arg1, [generate_index_list(l-1); :∞], [(0,Symbol("idx$other_x"))], argNum2_1, () -> "($s at $at)")
+                    function getNum1(I::Int...; N=nothing)
+                        getNum_aux(k::Int) = cached_getNum(s, I[1:other_x-1]..., I[other_x]-k, I[other_x+1:x_idx-1]..., k, I[x_idx:end]...; N)
+                        res = 0
+                        for k in 0:I[other_x]
+                            res += getNum_aux(k)
+                        end
+                        res
+                    end
+
 
                     function get_selfseries_coefficients1(idcs::Vararg{Int}; N=nothing)
                         res = Set()
@@ -1948,7 +1543,7 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                         center[other_x] = s.center[x_idx]
                     end
 
-                    new_series = SymbolicSeries(op, center, get_selfseries_coefficients1, s.contains_selfseries)
+                    new_series = SymbolicSeries(center, getNum1, get_selfseries_coefficients1, s.contains_selfseries, s.show)
                     new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
                     return evaluate(new_series, new_at...; _nbr_found=_nbr_found)
                 
@@ -1967,18 +1562,17 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
         else # x is a constant
 
             if isequal(at[x_idx], s.center[x_idx]) # x matches center component => allow use of PDESeries
-
-                index = generate_index_list(l-1)
-                op = NlinearSeriesOperation(v -> s[v[1:x_idx-1]..., 0, v[x_idx:end-1]..., N=v[end]], 
-                                            [index; :∞], () -> "($s at $at)")
                 
+                getNum3(I::Int...; N=nothing) = cached_getNum(s, I[1:x_idx-1]..., 0, I[x_idx:end]...; N)
+
                 get_selfseries_coefficients3(idcs::Vararg{Int}; N=nothing) = 
                     s.get_selfseries_coefficients(idcs[1:x_idx-1]...,0,idcs[x_idx:end]...; N)
 
                 center = copy(s.center)
                 deleteat!(center, x_idx)
 
-                new_series = SymbolicSeries(op, center, get_selfseries_coefficients3, s.contains_selfseries)
+                new_series = SymbolicSeries(center, getNum3, get_selfseries_coefficients3, 
+                                            s.contains_selfseries, s.show)
                 new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
 
                 return evaluate(new_series, new_at...; _nbr_found=_nbr_found)
@@ -2104,10 +1698,7 @@ end
 Base.:~(LHS::Union{EvaluatedSymbolicSeries, Number}, RHS::Union{EvaluatedSymbolicSeries, Number}) = SymbolicSeriesEquation(LHS, RHS)
 Base.:~(LHS::Number, RHS::Number) = Equation(LHS, RHS)
 
-Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "SymbolicSeriesEquation{\n $(eq.LHS) \n ~ \n $(eq.RHS) \n}")
-
-getSymbolics(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}) where D = (eq.LHS isa Number ? eq.LHS : getSymbolics(eq.LHS, idx...)) ~ (eq.RHS isa Number ? eq.RHS : getSymbolics(eq.RHS, idx...))
-getNum(eq::SymbolicSeriesEquation{D}, idx::Vararg{Int, D}; N=nothing) where D = (eq.LHS isa Number ? eq.LHS : getNum(eq.LHS, idx..., N=N)) ~ (eq.RHS isa Number ? eq.RHS : getNum(eq.RHS, idx..., N=N))
+Base.show(io::IO, eq::SymbolicSeriesEquation) = print(io, "$(eq.LHS) ~ $(eq.RHS)")
 
 """
     get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D}, I::Vararg{Int, D}) where D
@@ -2134,51 +1725,66 @@ function get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D},
 end
 
 ############################### cached getNum function ##############################
+"""
+    getNum2(x, idx::Int...; N=nothing)
 
+    Retrieves a numeric representation of something that represents a series at index idx,
+    while applying truncation order N. 
+
+    If no specific getNum2 function is defined for a given representation of a series, 
+    x is returned. This can also be useful when one wants to apply getNum2 to a bunch of
+    elements, some of which might be Numbers or something else.
+
+    This function uses memoization to compute the numeric representations efficiently. 
+    The memoized version of this function is `cached_getNum`. It has the same signature.
+    This cache can be cleared using `clear_num_cache()`
+
+    Currently implemented versions of getNum2 include:
+
+    - `getNum2(x::Any, ::Vararg{Int}; N=nothing)` -- default
+    - `getNum2(sss::ScalarSeriesSymbol, idx::Vararg{Int}; N=nothing)` -- returns the value
+      of the series coefficients if it has already been computed, and its unique_sym if it
+      refers to a series represented by a Symbol (such as :self)
+    - `getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D`
+
+    Some variants are also implemented:
+
+    - `getSymbolics(sc::SeriesCoefficient)::Num` -- Retrieves the unique_sym of a 
+      SeriesCoefficient
+    - `getNum(sc::SeriesCoefficient)::Number` -- Retrieves the value of a SeriesCoefficient
+      if it has already been computed or its unique_sym if the series it refers to is a 
+      Symbol (such as :self). If the series it refers to is not a Symbol and the 
+      coefficient has not yet been computed, throws an error
+
+    `cached_getNum` is implemented with the following signatures:
+
+    - `cached_getNum(x::Any, idx::Vararg{Int}; N=nothing)` -- defaults to getNum2
+    - `cached_getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D` -- 
+      stores result in an IdDict
+    - `cached_getNum(s::EvaluatedSymbolicSeries, idx::Vararg{Int}; N=nothing)`
+    - `cached_getNum(eq::SymbolicSeriesEquation, idx::Vararg{Int}; N=nothing)`
+"""
 getNum2(x::Any, ::Vararg{Int}; N=nothing) = x # default behaviour
-getNum2(sss::ScalarSeriesSymbol, idx::Vararg{Int}; N=nothing) = getNum(sss[convertIndices_fullsym_to_trunc(idx...)...])
-getNum2(sc::SeriesCoefficient, idx::Vararg{Int}; N=nothing) = getNum(sc)
 
-function getNum2(sym::Symbol, idx::Vararg{Int}; N=nothing)
-    if sym == :∞
-        return N
-    else
-        for (i, v) in enumerate(idx)
-            if sym == Symbol("idx$i")
-                return v
-            end
+getSymbolics(sc::SeriesCoefficient)::Num = sc.unique_sym
+
+function getNum2(sc::SeriesCoefficient)::Number
+    if !(sc.ps isa Symbol)
+        if sc.ps.order < sc.indices[1]
+            throw(ArgumentError("Cannot evaluate a SeriesCoefficient at order above the \
+                                 currently computed order. Involved SeriesCoefficient : 
+                                 $sc"))
+        else
+            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
         end
-        throw(ArgumentError("Tried to getNum of unknown symbol: $sym"))
+    else
+        getSymbolics(sc)
     end
 end
 
-getNum2_rg(t::Tuple{Any, Any}, idx::Vararg{Int}; N=nothing) = (getNum2(t[1], idx...; N):getNum2(t[2], idx...; N))
+getNum2(sss::ScalarSeriesSymbol, idx::Vararg{Int}; N=nothing) = getNum2(sss[convertIndices_fullsym_to_trunc(idx...)...])
 
-getNum2(op::NlinearSeriesOperation, idx::Vararg{Int}; N=nothing) =     
-    cached_getNum(op.func(map(arg -> cached_getNum(arg, idx...; N), op.args)), idx...; N)
-
-function getNum2(op::MultilinearSeriesOperation, idx::Vararg{Int}; N=nothing)
-    
-    rngs = CartesianIndices(tuple(map(rg -> getNum2_rg(rg, idx...; N), op.ranges)...))
-    params = map(p -> cached_getNum(p, idx...; N), op.arg_parameters)
-    res = 0
-    for idcs in rngs
-        res = op.aggreg(res, op.argNum2(Tuple(idcs)...; params))
-    end
-    res
-end
-
-function getNum2(op::TruncatedMultilinearSeriesOperation, idx::Vararg{Int}; N)
-    params = map(p -> cached_getNum(p, idx...; N), op.arg_parameters)
-    starts = map(s -> getNum2(s, idx...; N), op.starts)
-    fixed_idcs_order = isempty(op.fixedidcs) ? 0 : sum(idx[op.fixedidcs])
-    apply_with_fullsym_indices_from_and_upto((k...) -> op.argNum2(k...; params), 
-                                              op.aggreg,
-                                              N-fixed_idcs_order,
-                                              starts...)
-end
-
-getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = getNum2(s.ref, idx...; N)
+getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = s.getNum(idx...; N)
 
 const _num_cache = IdDict{Any, Dict{Any, Any}}()
 cached_getNum(x::Any, idx::Vararg{Int}; N=nothing) = getNum2(x, idx...; N)

@@ -332,6 +332,7 @@ end
     A,b such that eqs ⇔ A.vars = b 
 """
 function extract_affine_transformation(eqs::Vector{Equation}, vars::Vector{Num}, T::Type)
+    
     exprs = [eq.lhs-eq.rhs for eq in eqs]
 
     A_sym, b_sym, islinear = Symbolics.linear_expansion(exprs, vars)

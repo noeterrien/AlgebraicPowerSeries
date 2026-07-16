@@ -13,73 +13,70 @@ K = selfseries_symbols(2,2)
 sin_ss = SymbolicSeries(sin_series)
 K_ss = SymbolicSeries(K, [0])
 
-getNum((K_ss[1,1] + K_ss[1,2] + K_ss[2,1]) * 4, 2)
-getNum(K_ss[1,1] / 3, 1)
-getNum(x*K_ss[2,2], 4)
+getNum2((K_ss[1,1] + K_ss[1,2] + K_ss[2,1]) * 4, 2)
+getNum2(K_ss[1,1] / 3, 1)
+getNum2(x*K_ss[2,2], 4)
 
 
-@test getSymbolics(sin_ss*sin_ss, 4) ≈ getSymbolics((sin_ss*sin_ss)[4])
 
 sincos_series = TaylorExpansionSeries{Float64}(:sincos, [x,y], [sin(x), cos(y)], [0,0])
 compute_coefficients!(sincos_series, 6)
 sincos_ss = SymbolicSeries(sincos_series)
-@test getNum(sincos_ss[1][1,1]) ≈ 0
-@test getNum(sincos_ss[2][0,2]) ≈ -1/2
+@test getNum2(sincos_ss[1], 1, 1) ≈ 0
+@test getNum2(sincos_ss[2], 0, 2) ≈ -1/2
 
 sincos_ss[1](x,y)/3
 
 for i in 0:3, j in 0:3, k in 0:3
     if (i,j,k) != (1,0,0) && (i,j,k) != (3,0,0)
-        @test getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y))[i,j,k]) ≈ 0
+        @test cached_getNum(sincos_ss[1](y,z)*sincos_ss[2](t,y), i,j,k) ≈ 0
     end
 end
-@test getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y))[1,0,0]) ≈ 1
-@test getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y))[3,0,0]) ≈ -2/3
+@test cached_getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y)), 1,0,0) ≈ 1
+@test cached_getNum((sincos_ss[1](y,z)*sincos_ss[2](t,y)), 3,0,0) ≈ -2/3
 
 ∂x = Differential(x)
-@test getNum(∂x(sincos_ss[1](x,y))[0,0]) ≈ 1
-@test getNum(∂x(sincos_ss[1](x,y))[2,0]) ≈ -1/2
+@test cached_getNum(∂x(sincos_ss[1](x,y)), 0,0) ≈ 1
+@test cached_getNum(∂x(sincos_ss[1](x,y)), 2,0) ≈ -1/2
 
 test1_ts = TaylorExpansionSeries{Float64}(:t1, [x,y,z], [x^2 + 2x*y + y^2 + x + z + 3y*z], [0,0,0])
 compute_coefficients!(test1_ts, 10)
 test1_ss = SymbolicSeries(test1_ts)
 
 
-@test getNum(test1_ss(x, x, z)[2,0]) ≈ 4
-@test getNum(test1_ss(x, y, y)[0,2]) ≈ 4
-@test getNum(test1_ss(x, z, z)[0,1]) ≈ 1
-@test getNum(test1_ss(x, y, x)[1,0]) ≈ 2
-@test getNum(test1_ss(x, y, x)[1,1]) ≈ 5
+@test cached_getNum(test1_ss(x, x, z), 2,0) ≈ 4
+@test cached_getNum(test1_ss(x, y, y), 0,2) ≈ 4
+@test cached_getNum(test1_ss(x, z, z), 0,1) ≈ 1
+@test cached_getNum(test1_ss(x, y, x), 1,0) ≈ 2
+@test cached_getNum(test1_ss(x, y, x), 1,1) ≈ 5
 
-@test (K_ss[1,1]*K_ss[1,2]).get_selfseries_coefficients(2) == Set([K_ss[1,1][0], K_ss[1,1][1], K_ss[1,1][2],
-                                                                  K_ss[1,2][0], K_ss[1,2][1], K_ss[1,2][2]])
+@test (K_ss[1,1]*K_ss[1,2]).get_selfseries_coefficients(2) == Set([K[1,1][0], K[1,1][1], K[1,1][2],
+                                                                   K[1,2][0], K[1,2][1], K[1,2][2]])
 
 c = SymbolicSeries(TaylorExpansionSeries{Float64}(:c, [x], [1/(3+x^2)], [0]))
 K = SymbolicSeries(selfseries_symbols(2), [0,0])
-@show getSymbolics((c(x)*K[1](x,y))[1,0])
-@show getSymbolics((c(x)*K[1](x,y))[0,1])
 
-@test getNum(test1_ss(x,2,3)[0,N=2]) ≈ 25
-@test getNum(test1_ss(x,2,3)[1,N=2]) ≈ 5
-@test getNum(test1_ss(x,2,3)[2,N=2]) ≈ 1
+@test cached_getNum(test1_ss(x,2,3), 0,N=2) ≈ 25
+@test cached_getNum(test1_ss(x,2,3), 1,N=2) ≈ 5
+@test cached_getNum(test1_ss(x,2,3), 2,N=2) ≈ 1
 
-@test getNum(test1_ss(1,y,y)[0,N=2]) ≈ 2
-@test getNum(test1_ss(1,y,y)[1,N=2]) ≈ 3
-@test getNum(test1_ss(1,y,y)[2,N=2]) ≈ 4
+@test cached_getNum(test1_ss(1,y,y), 0,N=2) ≈ 2
+@test cached_getNum(test1_ss(1,y,y), 1,N=2) ≈ 3
+@test cached_getNum(test1_ss(1,y,y), 2,N=2) ≈ 4
 
 test2_ts = TaylorExpansionSeries{Float64}(:t1, [x,y,z], [(x-1)^2 + 2(x-1)*y + y^2 + x-1 + z-2 + 3y*(z-2)], [1,0,2])
 compute_coefficients!(test2_ts, 10)
 test2_ss = SymbolicSeries(test2_ts)
 
-@test getNum(test2_ss(0,0,0)[N=2]) ≈ -2
-@test getNum(test2_ss(x,x,x)[0,N=2]) ≈ -3
-@test getNum(test2_ss(x,x,x)[1,N=2]) ≈ 6
-@test getNum(test2_ss(x,x,x)[2,N=2]) ≈ 7
+@test cached_getNum(test2_ss(0,0,0), N=2) ≈ -2
+@test cached_getNum(test2_ss(x,x,x), 0,N=2) ≈ -3
+@test cached_getNum(test2_ss(x,x,x), 1,N=2) ≈ 6
+@test cached_getNum(test2_ss(x,x,x), 2,N=2) ≈ 7
 
-@test getNum(translate(test2_ss, [0,0,0])(0,0,0)[N=2]) ≈ -2
-@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[0,N=2]) ≈ -2
-@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[1,N=2]) ≈ -8
-@test getNum(translate(test2_ss, [0,0,0])(x,x,x)[2,N=2]) ≈ 7
+@test cached_getNum(translate(test2_ss, [0,0,0])(0,0,0), N=2) ≈ -2
+@test cached_getNum(translate(test2_ss, [0,0,0])(x,x,x), 0, N=2) ≈ -2
+@test cached_getNum(translate(test2_ss, [0,0,0])(x,x,x), 1, N=2) ≈ -8
+@test cached_getNum(translate(test2_ss, [0,0,0])(x,x,x), 2, N=2) ≈ 7
 
 
 
@@ -112,9 +109,9 @@ let
     K = K_ss
     R1 = (ϵ(x) + μ(x))*K[1](x,x) ~ -C[2,1](x)
     R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
-    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
-    @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][0,0]])
-    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K_symbols[1][2,0], K_symbols[1][2,1], K_symbols[1][2,2]])
+    @test get_involved_selfseries_coefficients(R1, 2) == Set([K_symbols[1][2,0], K_symbols[1][2,1], K_symbols[1][2,2], K_symbols[1][0,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K_symbols[1][2,0], K_symbols[2][2,0]])
 
     # main PDE
     K = K_ss(x,ξ)
@@ -133,8 +130,8 @@ let
     Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
     tol = 1e-5
     for i in 0:3, j in 0:i
-        @test ≈(getNum(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
-        @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum2(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum2(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
     end
 end
 
@@ -147,9 +144,9 @@ let
     K = K_ss
     R1 = (ϵ(x) + μ(x))*K[1](x,x) ~ -C[2,1](x)
     R2 = μ(0)*K[2](x,0) ~ q*ϵ(0)*K[1](x,0)
-    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K[1][2,0], K[1][1,1], K[1][0,2]])
-    @test get_involved_selfseries_coefficients(R1, 2) == Set([K[1][2,0], K[1][1,1], K[1][0,2], K[1][0,0]])
-    @test get_involved_selfseries_coefficients(R2, 2) == Set([K[1][2,0], K[2][2,0]])
+    @test K[1](x,x).series.get_selfseries_coefficients(2) == Set([K_symbols[1][2,0], K_symbols[1][2,1], K_symbols[1][2,2]])
+    @test get_involved_selfseries_coefficients(R1, 2) == Set([K_symbols[1][2,0], K_symbols[1][2,1], K_symbols[1][2,2], K_symbols[1][0,0]])
+    @test get_involved_selfseries_coefficients(R2, 2) == Set([K_symbols[1][2,0], K_symbols[2][2,0]])
     
     # main PDE
     K = K_ss(x,ξ)
@@ -168,8 +165,8 @@ let
     Kᵛᵛ_matematica = [-0.888889, -0.0877915, 0.0877915, 0.589612/2, -1.17922/2, 0.293316/2, -0.949904/6,  3.6947/6, -3.7825/6, 1.0377/6]
     tol = 1e-5
     for i in 0:3, j in 0:i
-        @test ≈(getNum(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
-        @test ≈(getNum(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum2(Kᵛᵘ[i,j]), Kᵛᵘ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
+        @test ≈(getNum2(Kᵛᵛ[i,j]), Kᵛᵛ_matematica[convertIndices_trunc_to_lin(i,j)], atol=tol)
     end
 end
 
