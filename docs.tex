@@ -171,6 +171,9 @@ There are two benchmarks that can be used to test problems requiring LocalizedPD
 
 Some solvers from LinearSolve can't be used directly (solvers using sparsity or CUDA cores) so parser were written for them in the "custom\_solvers.jl" file
 
+\subsection{Another possible approach}
+%TODO
+
 \section{User guide}
 
 This user guide explains how to use the objects defined in "AlgebraicPowerSeries.jl" and "utilitaries.jl" files to expand functions into their Taylor series, solve Partial Differential Equations (PDE) and build the resulting functions' approximations.
@@ -293,7 +296,7 @@ Details on the implementation can be found in the \nameref{sec:app}
 
 All operations +, -, * involving a \code{SymbolicSeries} and a constant (either \code{Number} or \\ \code{SymbolicSeries\{0\}}) can be used the other way around.
 
-This set of operations is however quite limited. To access a wider range of operations, one needs to be able to evaluate \code{SymbolicSeries} in some variables and / or constants. If s is a \code{SymbolicSeries{D}}, this can simply be done using \code{s($x_1, x_2, \dots, x_D$)} where $x_1, x_2, \dots, x_D$ can either be variables (obtained with the \code{@variables} macro) or constants. %TODO : Polynomials
+This set of operations is however quite limited. To access a wider range of operations, one needs to be able to evaluate \code{SymbolicSeries} in some variables and / or constants. If s is a \code{SymbolicSeries{D}}, this can simply be done using \code{s($x_1, x_2, \dots, x_D$)} where $x_1, x_2, \dots, x_D$ can either be variables (obtained with the \code{@variables} macro) or constants (or a \code{SymbolicSeries}, see \nameref{sec:compose}).
 
 Once this is done, one obtains an \code{EvaluatedSymbolicSeries} and a number of additionnal operations: 
 
@@ -360,7 +363,7 @@ The available operations on SymbolicSeries make this module quite flexible. Howe
         \item then translate a series that does not depend on the derivatives of the \code{:self} series
         \item if none of those allows to define which of the terms should be translated, then translate the right term of the operator
     \end{enumerate} 
-    This is not symmetric and introduces algorithmic complexity, as well as the need to use LocalizedPDESeries instead of PDESeries. When this happens, an \code{info} message is displayed and if a series depending on the series \code{:self} was translated, a \code{warning} is displayed. You can read \nameref{sec:translate} for details on the implementation of the translation
+    This is not symmetric and introduces algorithmic complexity, as well as the need to use LocalizedPDESeries instead of PDESeries. When this happens, an \code{info} message is displayed and if a series depending on the series \code{:self} was translated, a \code{warning} is displayed. This messages can be disabled by using the \code{set\_display\_info(::Bool)} and \code{set\_display\_warn(::Bool)} functions. By default, these values are set to \code{true}. You can read \nameref{sec:translate} for details on the implementation of the translation
 \end{itemize}
 
 The translation phase might make it impossible to compute the coefficients, due to how equations between the series' coefficients are inferred, especially when differential operators are present. Here is an example of what not to do with an explanation on how it is handled:
@@ -378,6 +381,23 @@ For the left hand side, the variables will be reordered so that $D2yK(y,x)$ beco
 Indeed, when trying to infer the equations between the series' coefficients that should be used the compute the coefficients, the \code{compute\_coefficients!} method will detect that it depends on coefficients up to order $N+2$ when trying to computing the coefficients up to order $N$. Thus, these equations will be discarded and there won't be enough equations to solve the system. You can find details on the \code{compute\_coefficients!} method in the section \nameref{sec:PDEScompute}
 
 If one really needs to write this kind of equations, first integrate to make one of the differential operators disappear, then give the \code{compute\_coefficients!} method the additionnal \code{maxIntegrationOrders} argument to ensure that all the equations between the coefficients are inferred. 
+
+\subsubsection{Composing SymbolicSeries}
+\label{sec:compose}
+
+Composing \code{SymbolicSeries} is made possible using the following formula:
+
+If $f(x) = \sum_{i=0}^{+\infty} f_i(x-c)^i$, and $K(y_1, ..., y_n) = \sum_{i_1=0}^{+\infty} \dots \sum_{i_n=0}^{\infty} K_{i_1, \dots, i_n} (y_1-c_1)^{i_1}\dots (y_n -c_n)^{i_n}$, 
+
+then 
+$f(K(y_1, ..., y_n)) = f_0 + (K(y_1, \dots, y_n)-c)(f_1 + \sum_{i=2}^{+\infty}f_i(K(y_1, \dots, y_n))^{i-2})$
+
+Internally, this is done by expanding the composed series up to the right order at the moment of computing the coefficients. Thus, even though it is possible it should be avoided when possible, especially the composition of a series with multiple series. This is because the complexity of expanding such series would be $O(N^p)$ where $N$ is the order and $p$ the number of composed series (for instance the complexity of computing $f(K_1, K_2, K_3)$ would be $O(N^3)$), and expanding a composed series at a new order means having to compile new functions for the multiplication and addition of the new series created.
+
+When composing \code{SymbolicSeries}, if the center of $f$ does not match the constant coefficient of $K$, the use of \code{LocalizedPDESeries} will be necessary, even though no message will be displayed to tell the user.
+
+Details on the implementation can be found in \nameref{sec:unexp}
+
 
 \subsubsection{Constructing PDESeries and LocalizedPDESeries}
 
@@ -557,23 +577,21 @@ Several functions, defined in the "utilitaries.jl" file allow to translate indic
 
 Since power series can possibly have an infinite number of terms, it is not possible to easily represent operations on them numerically. To do so, a first approach is to truncate the series. This is what is done in the TaylorSeries module ~\cite{taylorseriesmodule}. However, since \code{PowerSeries} are supposed to represent power series algebraically, this is not the approach that what chosen here (even though the TaylorSeries module is used to compute \code{TaylorExpansionSeries}' coefficients).
 
-Instead, operations on power series are represented as a tree of operations. The nodes of this tree are \code{SymbolicSeries} or \code{EvaluatedSymbolicSeries} and its leaves are \code{ScalarSeriesSymbol}. This way, the truncation can be applied only when computing the coefficients.
+Instead, operations on power series are represented as a tree of operations. The nodes of this tree are \code{SymbolicSeries} or a wrapper, \code{EvaluatedSymbolicSeries} and its leaves are \code{ScalarSeriesSymbol} or \code{Number}s. This way, the truncation can be applied only when computing the coefficients.
 
 \subsubsection{SymbolicSeries, EvaluatedSymbolicSeries and SymbolicSeriesEquation}
 
-\code{SymbolicSeries\{D\}} are the leaves of the tree of operations on power series. Its attributes are the following:
+\code{SymbolicSeries\{D\}} are the nodes of the tree of operations on power series. Its attributes are the following:
 
 \begin{itemize}
     \item \code{D} -- The number of variables of the \code{SymbolicSeries}
-    \item \code{ref::Union\{ScalarSeriesSymbol, 
-                            NlinearSeriesOperation,
-                            MultilinearSeriesOperation\}} -- 
-    Either a \code{ScalarSeriesSymbol} if the \code{SymbolicSeries} is a leaf, or an operations on other \code{SymbolicSeries} (see \nameref{sec:nlinop} and \nameref{sec:mlinop} for details)
     \item \code{center::Vector} -- The center of the series. \code{center}components can be set to \code{:unspecified} if not specific (for instance for constant series). In this case, it will be changed to the other series' center component when performing an operation with another series that evaluates in the same corresponding variable
-    \item \code{get\_selfseries\_coefficients} -- A function that, given a \code{Vararg\{Int, D\}}, returns the set of \code{SeriesCoefficient} referring to \code{:self} that appear in the operation. This is used by the \code{compute\_coefficients!} method. This function has a named optionnal argument \code{N} which is the truncation order to be passed if an operation implies an infinite number of coefficients
+    \item \code{getNum(I::Vararg{Int, D}; N)} -- A function which, given a \code{Vararg{Int, D}}, returns the numerical expression of the function at index \code{I}.
+    \item \code{get\_selfseries\_coefficients(I::Vararg{Int, D}; N)} -- A function that, given a \code{Vararg\{Int, D\}}, returns the set of \code{SeriesCoefficient} referring to \code{:self} that appear in the operation. This is used by the \code{compute\_coefficients!} method. This function has a named optionnal argument \code{N} which is the truncation order to be passed if an operation implies an infinite number of coefficients
+    \item \code{contains\_selfseries::Int} -- Whether or not the subtree of operations refers to the series \code{:self} at some point. Set to $0$ if it's not the case, $1$ if it is the case and $2$ if it refers to some of its derivatives.
+    \item \code{show} -- A function used to display the SymbolicSeries. It must not have any argument. This is the function called by \code{Base.show(::IO, ::SymbolicSeries)}
+    \item \code{should\_cache} -- When computing the series' coefficients, whether or not the result should be cached (see \nameref{sec:cache} for more details)
 \end{itemize}
-
-An example is provided at the end of \nameref{sec:nlinop} section.
 
 Since some operations require the series involved to be evaluated in some variables, the \\ \code{EvaluatedSymbolicSeries\{D\}} can do just that. Its attributes are:
 
@@ -590,188 +608,24 @@ Finally, \code{SymbolicSeriesEquation{D}} represents an equation between two \co
     \item \code{RHS::Union\{SymbolicSeries\{D\}, Number\}} -- The right hand side
 \end{itemize}
 
-The \code{Base.show} method is implemented for \code{SymbolicSeries}, \code{EvaluatedSymbolicSeries} and \code{SymbolicSeriesEquation}, even though it may not give any particular insights to display those.
+The \code{Base.show} method is implemented for \code{SymbolicSeries}, \code{EvaluatedSymbolicSeries} and \code{SymbolicSeriesEquation}.
 
-\subsubsection{NlinearSeriesOperation}
-\label{sec:nlinop}
 
-\code{NlinearSeriesOperation} are used to represent a linear operation between a finite number of terms that is known before choosing a coefficient.
+\subsubsection{cached getNum and get\_selfseries\_coefficients method}
+\label{sec:cache}
 
-Their attributes are the following:
+To make computation of the coefficients faster, the \code{getNum} and \code{get\_selfseries\_coefficients} methods make use of memoization. That is, the coefficients for which the computation might be complex are stored internally to avoid having to recompute them. Whether or not the result of the operation should be stored is decided by the \code{should\_cache} boolean attribute of \code{SymbolicSeries} (if set to true, then the result is stored)
 
-\begin{itemize}
-    \item \code{func} -- The function used to aggregate all the arguments. It should take a \code{Vector} as input
-    \item \code{args::Vector} -- The arguments of the function. These can be \code{SymbolicSeries}, numbers, or some symbols: \code{:idxi} represents the i-th index of the series' coefficient while \code{:$\infty$} represents positive infinity and should be replaced by the truncation order \code{N} when computing the operation.
-\end{itemize}
+Currently, the operations that are cached are: multiplication of two series, translation of a series to a different center and evaluation of the series in twice (or more) the same variable.
 
-Here is an example of how it is used to implement the "+" operator:
+For this to work properly, \code{SymbolicSeries}' \code{getNum} and \code{get\_selfseries\_coefficients} methods should make use of \code{cached\_getNum(::SymbolicsSeries\{D\}, ::Vararg\{Int, D\}; N)} and \code{cached\_get\_selfseries\_coeffs(::SymbolicSeries\{D\}, ::Vararg\{Int, D\}; N)} methods rather than directly using sub series' \code{getNum} and \code{get\_selfseries\_coefficients} methods.
 
-\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
-    function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
-    
-        # computing the new center
-        center = []
-        for (c1, c2) in zip(s1.center, s2.center)
-            if c1 != :unspecified && c2 != :unspecified && c1!=c2
-                throw(ArgumentError("Can only add SymbolicSeries that have the same centers"))
-            elseif c1 == :unspecified
-                push!(center, c2)
-            else
-                push!(center, c1)
-            end
-        end
-
-        # write the "+" operator as a NlinearSeriesOperation between two series
-        op = NlinearSeriesOperation(v -> v[1] + v[2], [s1, s2])
-        
-        # define the new SymbolicSeries get_self_series_coefficient
-        get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-            union(s1.get_selfseries_coefficients(I...; N), 
-                  s2.get_selfseries_coefficients(I...; N))
-
-        # construct the new SymbolicSeries
-        SymbolicSeries(op, center,  get_selfseries_coefficients)
-    
-    end
-\end{minted}
-
-\subsubsection{MultilinearSeriesOperation}
-\label{sec:mlinop}
-
-\code{MultilinearSeriesOperation} are used to represent a linear operation between a possibly non finite number of terms, that can only be determined once a coefficient is chosen
-
-Their attributes are the following:
-
-\begin{itemize}
-    \item \code{func} -- The function used to aggregate all the arguments. It should take a \code{Vector} as input
-    \item \code{arg} -- A function which, when called on some indices, will return an argument to be aggregated using \code{func}. This function must return either a \code{SeriesCoefficient}, \code{Number}, or an operation (\code{NlinearSeriesOperation}, \code{MultilinearSeriesOperation}) on series coefficients and numbers. This function \textbf{cannot} return anything representing a series. It should also accept an named argument \code{params::Vector} which by default can be set to \code{[]}.
-    \item \code{arg\_parameters::Vector} -- A \code{Vector} of parameters to pass to the \code{arg} function. These parameters can be \code{SymbolicSeries}, \code{Number}, or similar to \code{NlinearSeriesOperation}, special \code{Symbols} such as \code{idxi} (where i is an integer between 1 and the number of variables of the series it is used inside), \code{:$\infty$}
-    \item \code{ranges::Vector\{Tuple\{Any,Any\}\}} -- The ranges between which the indices to be passed to \code{arg} vary. Can be integers but also symbols \code{:idxi}, \code{:$\infty$} 
-\end{itemize}
-
-When using this \code{MultilinearSeriesOperation} (see \nameref{sec:getidx} and \nameref{sec:getNumSym}), the \code{arg} function will first be called on every possible index between \code{ranges}, and with the optionnal argument \code{params=arg\_parameters} to construct a vector of arguments that will then be passed to the aggregation function \code{func}
-
-As an example, here is how the multiplication between two \code{SymbolicSeries} of one variable is implemented:
-
-\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
-    function Base.:*(s1::SymbolicSeries{1}, s2::SymbolicSeries{1})
-
-        # construct the new center
-        center = []
-        for (c1, c2) in zip(s1.center, s2.center)
-            if c1 != :unspecified && c2 != :unspecified && c1!=c2
-                throw(ArgumentError("Can only multiply SymbolicSeries that have the same centers"))
-            elseif c1 == :unspecified
-                push!(center, c2)
-            else
-                push!(center, c1)
-            end
-        end
-
-        # construct the arg function that returns an operation between two
-        # of the series coefficients (indexing a SymbolicSeries is
-        # explained in the next section)
-        arg(j; params::Vector=[]) = 
-            NlinearSeriesOperation(v -> v[1]*v[2], 
-                                   [s1[j,N=params[2]], 
-                                    s2[params[1]-j, N=params[2]]])
-        
-        # create the MultilinearSeriesOperation
-        op = MultilinearSeriesOperation(x -> Base.:+(x...), # aggregation 
-                                        arg, # arg
-                                        [:idx1,:oo], # parameters (*)
-                                        [(0,:idx1)]) # range
-        
-        get_selfseries_coefficients(i::Int; N=nothing) = 
-            union([union(s1.get_selfseries_coefficients(j;N), 
-                         s2.get_selfseries_coefficients(i-j;N)
-                        ) for j in 0:i]...)
-
-        # construct the resulting SymbolicSeries
-        SymbolicSeries(op, center, get_selfseries_coefficients)
-    end
-\end{minted}
-
-(*) \textit{\code{:oo} is \code{:$\infty$} where $\infty$ can be obtained by typing \symbol{92}infty}
-
-\subsubsection{getindex method on SymbolicSeries}
-\label{sec:getidx}
-
-Operations on power series ultimately translate to operations on their coefficients. Thus, one needs to access a \code{SymbolicSeries} "coefficients". This is the purpose of the \code{getindex} method as defined on \code{SymbolicSeries}. Once it has been used, the \code{SymbolicSeries} tree, which leaves are \code{ScalarSeriesSymbol} becomes a tree which leaves are \code{SeriesCoefficient}. This tree can then be passed to other functions that can explore it and developp the operations such as \nameref{sec:getNumSym}.
-
-Here are the details of the \code{getindex}: 
-
-\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
-
-function Base.getindex(s::SymbolicSeries{D}, args::Vararg{Any,D}; N=nothing) where D 
-# optional named argument N is the truncation order
-
-    # truncation ==> return 0 if the coefficient order is above N
-    if !(isnothing(N)) && D > 0 && +(args...) > N
-        return 0
-    end
-
-    #= substitution: 
-        - :idxi is replaced with args[i]
-        - :oo is replaced with N
-    =#
-    idx_subst = Dict{Symbol, Union{Int, Nothing}}([Symbol("idx$i") => v for (i,v) in enumerate(args)])
-    idx_subst[:oo] = N
-
-    # substitution on tuples (used for ranges)
-    substitution2(t) = (substitution(t[1]), substitution(t[2]))
-
-    function substitution(arg) 
-        if arg isa ScalarSeriesSymbol 
-            # ScalarSeriesSymbol becomes a SeriesCoefficient
-            arg[convertIndices_fullsym_to_trunc(args...)...]
-        elseif arg isa SymbolicSeries
-            # Apply getindex to contained SymbolicSeries
-            arg[args..., N=N]
-        elseif arg isa NlinearSeriesOperation
-            # substitute in every argument of NlinearSeriesOperation
-            NlinearSeriesOperation(arg.func, map(substitution, arg.args))
-        elseif arg isa MultilinearSeriesOperation
-            # substitute in every arg_parameter and range
-            MultilinearSeriesOperation(arg.func, 
-                               arg.arg, 
-                               substitution.(arg.arg_parameters), 
-                               substitution2.(arg.ranges))
-        elseif arg in keys(idx_subst)
-            # substitute :idxi and :oo
-            idx_subst[arg]
-        else
-            # if something else is present, do nothing
-            arg
-        end
-    end
-    
-    # apply substitution to the series' ref attribute
-    substitution(s.ref)
-end
-
-\end{minted}
-
-A \code{getindex} method with the same signature also exists for \code{EvaluatedSymbolicSeries} and will simply apply \code{getindex} to its \code{series} attribute.
-
-\subsubsection{getNum and getSymbolics method}
-\label{sec:getNumSym}
-
-Once a tree of operations that contains only finite numbers of coefficients has been constructed, it is possible to explore it to get some results from it. The \code{getNum} and \code{getSymbolics} methods allow the user to retrieve Symbolics' representation of these operations. The only difference between the two come from how \code{SeriesCoefficient} objects are handled.
-
-\code{getSymbolics(::SeriesCoefficient)} will simply return the \code{SeriesCoefficient}' \code{unique\_sym} attribute while \code{getNum(::SeriesCoefficient)} will return its value if it has already been computed, or its \code{unique\_sym} if it refers to series \code{:self} (and throw an error otherwise).
-
-Otherwise, here is how these methods behave when applied to different objects (with the example of \code{getNum}):
-
-\begin{itemize}
-    \item \code{x::Number} -- returns \code{x}
-    \item \code{::Nothing} -- returns \code{nothing}
-    \item \code{::NlinearSeriesOperation} -- Applies \code{getNum} to every argument, aggregates the results and then returns \code{getNum} applied to the result of the aggregation
-    \item \code{::MultilinearSeriesOperation} -- Applies \code{getNum} to every result of \code{arg} within range, aggregates the results and then returns \code{getNum} applied to the result of the aggregation
-\end{itemize}
-
-\code{getNum} and \code{getSymbolics} are also available for \code{SymbolicSeries}, \code{EvaluatedSymbolicSeries} and \code{SymbolicSeriesEquation}, and in those cases, take extra arguments to indicate which indices the \code{getindex} method should be called with before applying \code{getNum} and \code{getSymbolics}
+These caches can be cleared using the \code{clear\_num\_cache()} and \code{clear\_selfseries\_cache()} methods and are automatically cleared at the end of the \code{compute\_coefficients!} methods of \code{PDESeries} and \code{LocalizedPDESeries}
  
+\subsubsection{UnexpandedEvaluatedSymbolicSeries}
+\label{sec:unexp}
+%TODO
+
 \subsubsection{The compute\_coefficients! method}
 \label{sec:PDEScompute}
 

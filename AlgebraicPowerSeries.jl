@@ -7,7 +7,7 @@ include("solvers.jl")
 _DISPLAY_INFO=true
 _DISPLAY_WARN=true
 set_display_info(to::Bool) = (_DISPLAY_INFO = to)
-set_warn_info(to::Bool) = (_DISPLAY_WARN = to)
+set_display_warn(to::Bool) = (_DISPLAY_WARN = to)
 
 #---------------------------------------------------------------------------------------------------------------------
 abstract type AbstractPowerSeries{D} end
@@ -571,6 +571,8 @@ end
       to more than 1, then it refers to some derivatives of the series :self
     - `show` -- A function which is used to display the SymbolicSeries. Its signature
       should be `show()::String`
+    - `should_cache` -- Whether or not the results of this operation should be cached when
+      computing the coefficients
 
     ### Examples
 
@@ -578,7 +580,8 @@ end
                       center::Vector,
                       get_selfseries_coefficients,
                       contains_selfseries::Int,
-                      show)` -- default constructor
+                      show,
+                      should_cache::Bool)` -- default constructor
     - `SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)` -- Creates a SymbolicSeries
       from a ScalarSeriesSymbol
     - `SymbolicSeries(a::Array{ScalarSeriesSymbol}, center::Vector)::Array{SymbolicSeries}` 
@@ -596,10 +599,11 @@ struct SymbolicSeries{D}
     get_selfseries_coefficients
     contains_selfseries::Int
     show
+    should_cache::Bool
 
     function SymbolicSeries(center::Vector, getNum, get_selfseries_coefficients,
-                            contains_selfseries::Int, show) 
-        new{length(center)}(center, getNum, get_selfseries_coefficients, contains_selfseries, show)
+                            contains_selfseries::Int, show, should_cache::Bool) 
+        new{length(center)}(center, getNum, get_selfseries_coefficients, contains_selfseries, show, should_cache)
     end
 end
 
@@ -613,7 +617,7 @@ function SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)
     show() = "$(sss)"
 
     if sss.ps != :self
-        SymbolicSeries(center, getNum, get_selfseries_coefficients_none, 0, show)
+        SymbolicSeries(center, getNum, get_selfseries_coefficients_none, 0, show, true)
 
     elseif sss.ps == :self
 
@@ -626,7 +630,7 @@ function SymbolicSeries(sss::ScalarSeriesSymbol, center::Vector)
             end
         end
 
-        SymbolicSeries(center, getNum, get_selfseries_coefficients, 1, show)
+        SymbolicSeries(center, getNum, get_selfseries_coefficients, 1, show, true)
 
     else
         throw(ArgumentError("Unknown symbol : $(sss.ps)"))
@@ -648,7 +652,7 @@ function SymbolicSeries{D}(x::Number) where D
     getNum(I::Int...; N=nothing) = all(==(0), I) ? x : 0
     show(I::Int...; N=nothing) = "$x"
 
-    SymbolicSeries(fill(:unspecified, D), getNum, get_selfseries_coefficients_none, 0, show)
+    SymbolicSeries(fill(:unspecified, D), getNum, get_selfseries_coefficients_none, 0, show, false)
 end
 Base.convert(::Type{SymbolicSeries{D}}, x::Number) where D = SymbolicSeries{D}(x)
 
@@ -755,7 +759,7 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
                                                  I[is_center_comp_trans]...)
     end
 
-    SymbolicSeries(res_center, getNum, get_selfseries_coefficients, s.contains_selfseries, s.show)
+    SymbolicSeries(res_center, getNum, get_selfseries_coefficients, s.contains_selfseries, s.show, true)
 end
 
 """
@@ -790,8 +794,8 @@ function merge_centers(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
 
     end
 
-    new_s1 = SymbolicSeries(new_center1, s1.getNum, s1.get_selfseries_coefficients, s1.contains_selfseries, s1.show)
-    new_s2 = SymbolicSeries(new_center2, s2.getNum, s2.get_selfseries_coefficients, s2.contains_selfseries, s2.show)
+    new_s1 = SymbolicSeries(new_center1, s1.getNum, s1.get_selfseries_coefficients, s1.contains_selfseries, s1.show, false)
+    new_s2 = SymbolicSeries(new_center2, s2.getNum, s2.get_selfseries_coefficients, s2.contains_selfseries, s2.show, false)
 
     if isequal(new_center1, new_center2) 
         (new_s1, new_s2)
@@ -877,7 +881,7 @@ function shift(s::SymbolicSeries{D}, by::NTuple{D, Int}) where D
 
     show() = "($s)↑$by"
 
-    SymbolicSeries(s.center, getNum, get_selfseries_coefficients, s.contains_selfseries, show)
+    SymbolicSeries(s.center, getNum, get_selfseries_coefficients, s.contains_selfseries, show, false)
 end
 
 function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
@@ -896,7 +900,7 @@ function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     show() = "($s1 + $s2)"
 
     SymbolicSeries(s1.center, getNum, get_selfseries_coefficients, 
-                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+                   max(s1.contains_selfseries, s2.contains_selfseries), show, false)
 end
 
 function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
@@ -915,7 +919,7 @@ function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
     show() = "($s + $c)"
 
     SymbolicSeries(s.center, getNum, get_selfseries_coefficients, 
-                   max(s.contains_selfseries, c.contains_selfseries), show)
+                   max(s.contains_selfseries, c.contains_selfseries), show, false)
 end
 Base.:+(c::SymbolicSeries{0}, s::SymbolicSeries) = s+c
 
@@ -928,7 +932,7 @@ function Base.:+(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
     show() = "($s1 + $s2)"
 
     SymbolicSeries([], getNum, get_selfseries_coefficients, 
-                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+                   max(s1.contains_selfseries, s2.contains_selfseries), show, false)
 end
 
 Base.:+(s::SymbolicSeries, x::Number) = s + SymbolicSeries{0}(x)
@@ -949,7 +953,7 @@ function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     show() = "($s1 - $s2)"
 
     SymbolicSeries(s1.center, getNum, get_selfseries_coefficients, 
-                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+                   max(s1.contains_selfseries, s2.contains_selfseries), show, false)
 end
 
 function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
@@ -969,7 +973,7 @@ function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
     show() = "($s - $c)"
 
     SymbolicSeries(s.center, getNum, get_selfseries_coefficients, 
-                   max(s.contains_selfseries, c.contains_selfseries), show)
+                   max(s.contains_selfseries, c.contains_selfseries), show, false)
 end
 Base.:-(c::SymbolicSeries{0}, s::SymbolicSeries) = s-c
 
@@ -984,7 +988,7 @@ function Base.:-(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
     show() = "($s1 - $s2)"
 
     SymbolicSeries([], getNum, get_selfseries_coefficients, 
-                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+                   max(s1.contains_selfseries, s2.contains_selfseries), show, false)
 end
 
 Base.:-(s::SymbolicSeries, x::Number) = s - SymbolicSeries{0}(x)
@@ -1002,7 +1006,7 @@ Base.:-(x::Number, s::SymbolicSeries) = SymbolicSeries{0}(x) - s
 function Base.:*(t::Number, s::SymbolicSeries)
     getNum(I::Int...; N=nothing) = t*cached_getNum(s, I...; N)
     show() = "($t * $s)"
-    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show)
+    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show, false)
 end
 """
     Base.:*(s::SymbolicSeries, t::Number)
@@ -1028,7 +1032,7 @@ Base.:-(s::SymbolicSeries) = -1*s
 function Base.:/(s::SymbolicSeries, t::Number)
     getNum(I::Int...; N=nothing) = cached_getNum(s, I...; N) / t
     show() = "($s / $t)"
-    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show)
+    SymbolicSeries(s.center, getNum, s.get_selfseries_coefficients, s.contains_selfseries, show, false)
 end
 
 function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
@@ -1063,7 +1067,7 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     show() = "($s1 * $s2)"
 
     SymbolicSeries(s1.center, getNum, get_self_series_coefficients, 
-                   max(s1.contains_selfseries, s2.contains_selfseries), show)
+                   max(s1.contains_selfseries, s2.contains_selfseries), show, true)
 
 end
 
@@ -1159,7 +1163,7 @@ function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
         cached_get_selfseries_coeffs(s.series, I[perm]...; N)
 
-    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
+    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show, false)(new_vars...)
 end
 
 
@@ -1181,7 +1185,7 @@ function union_variables(s::EvaluatedSymbolicSeries{D1}, vars::Vector) where D1
     get_selfseries_coefficients(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? 
         cached_get_selfseries_coeffs(s.series, I[1:D1]...; N=N) : Set()
 
-    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
+    SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show, false)(new_vars...)
 end
 
 
@@ -1316,7 +1320,7 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
     show() = "∂$(d.x)($s)"
 
     EvaluatedSymbolicSeries(SymbolicSeries(new_s.series.center, getNum, get_selfseries_coefficients, 
-                                           s.series.contains_selfseries ≥ 1 ? 2 : 0, show), 
+                                           s.series.contains_selfseries ≥ 1 ? 2 : 0, show, false), 
                             new_s.variables)
 
                     
@@ -1351,7 +1355,7 @@ function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
     show() = "∫ ($s) d$x"
 
     EvaluatedSymbolicSeries(SymbolicSeries(s.series.center, getNum, get_selfseries_coefficients, 
-                                           s.series.contains_selfseries, show), 
+                                           s.series.contains_selfseries, show, false), 
                             s.variables)
 
 end
@@ -1507,13 +1511,6 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                     s.center[other_x] == :unspecified || 
                     s.center[x_idx] == :unspecified) # the center components match => allow use of PDESeries
 
-                    argNum2_1(idx::Int; params) = cached_getNum(s, params[1:other_x-1]..., 
-                                                          params[other_x]-idx, 
-                                                          params[other_x+1:x_idx-1]..., 
-                                                          idx, 
-                                                          params[x_idx:end-1]...; 
-                                                          N=params[end])
-
                     function getNum1(I::Int...; N=nothing)
                         getNum_aux(k::Int) = cached_getNum(s, I[1:other_x-1]..., I[other_x]-k, I[other_x+1:x_idx-1]..., k, I[x_idx:end]...; N)
                         res = 0
@@ -1544,7 +1541,7 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                         center[other_x] = s.center[x_idx]
                     end
 
-                    new_series = SymbolicSeries(center, getNum1, get_selfseries_coefficients1, s.contains_selfseries, s.show)
+                    new_series = SymbolicSeries(center, getNum1, get_selfseries_coefficients1, s.contains_selfseries, s.show, true)
                     new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
                     return evaluate(new_series, new_at...; _nbr_found=_nbr_found)
                 
@@ -1573,7 +1570,7 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                 deleteat!(center, x_idx)
 
                 new_series = SymbolicSeries(center, getNum3, get_selfseries_coefficients3, 
-                                            s.contains_selfseries, s.show)
+                                            s.contains_selfseries, s.show, false)
                 new_at = at[1:x_idx-1]..., at[x_idx+1:end]...
 
                 return evaluate(new_series, new_at...; _nbr_found=_nbr_found)
@@ -1790,8 +1787,12 @@ getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = s.getNum
 const _num_cache = IdDict{Any, Dict{Any, Any}}()
 cached_getNum(x::Any, idx::Vararg{Int}; N=nothing) = getNum2(x, idx...; N)
 function cached_getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
-    d = get!(() -> Dict{Any, Any}(), _num_cache, s)
-    get!(() -> getNum2(s, idx...; N), d, idx)
+    if s.should_cache
+        d = get!(() -> Dict{Any, Any}(), _num_cache, s)
+        get!(() -> getNum2(s, idx...; N), d, idx)
+    else
+        getNum2(s, idx...; N)
+    end
 end
 cached_getNum(s::EvaluatedSymbolicSeries, idx::Vararg{Int}; N=nothing) = cached_getNum(s.series, idx...;N)
 
@@ -1809,9 +1810,11 @@ clear_selfseries_cache() = empty(_selfseries_cache)
 function cached_get_selfseries_coeffs(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
     if s.contains_selfseries == 0
         return Set()
-    else
+    elseif s.should_cache
         d = get!(() -> Dict{Any, Any}(), _selfseries_cache, s)
         get!(() -> s.get_selfseries_coefficients(idx...; N), d, idx)
+    else
+        s.get_selfseries_coefficients(idx...; N)
     end
 end
 ######################### UnexpandedSymbolicSeriesEquation #######################
