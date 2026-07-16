@@ -746,7 +746,7 @@ function translate(s::SymbolicSeries{D}, new_center::Vector) where D
                     coeff_idx[idx] = i
                 end
             end
-            s.get_selfseries_coefficients(coeff_idx...; N=N)
+            cached_get_selfseries_coeffs(s, coeff_idx...; N=N)
         end
 
         apply_with_fullsym_indices_from_and_upto(get_selfseries_coefficients_aux,
@@ -873,7 +873,7 @@ function shift(s::SymbolicSeries{D}, by::NTuple{D, Int}) where D
     getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s, (I.+by)...; N = isnothing(N) ? nothing : N-order_decrease)
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) =
-        s.get_selfseries_coefficients((I .+ by)...; N=isnothing(N) ? nothing : N-order_decrease)
+        cached_get_selfseries_coeffs(s, (I .+ by)...; N=isnothing(N) ? nothing : N-order_decrease)
 
     show() = "($s)↑$by"
 
@@ -890,7 +890,8 @@ function Base.:+(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s1, I...; N) + cached_getNum(s2, I...; N)
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-        s1.get_selfseries_coefficients(I...; N) ∪ s2.get_selfseries_coefficients(I...; N)
+        cached_get_selfseries_coeffs(s1, I...; N) ∪ 
+            cached_get_selfseries_coeffs(s2, I...; N)
 
     show() = "($s1 + $s2)"
 
@@ -907,7 +908,7 @@ function Base.:+(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
         if all(==(0), I) && isequal(-cached_getNum(c; N), cached_getNum(s, I...; N))
             Set()
         else
-            s.get_selfseries_coefficients(I...; N) ∪ c.get_selfseries_coefficients(N)
+            cached_get_selfseries_coeffs(s, I...; N) ∪ cached_get_selfseries_coeffs(c; N)
         end
     end
 
@@ -922,7 +923,7 @@ function Base.:+(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
 
     getNum(;N=nothing) = cached_getNum(s1; N) + cached_getNum(s2; N)
 
-    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(;N) ∪ s2.get_selfseries_coefficients(;N)
+    get_selfseries_coefficients(;N=nothing) = cached_get_selfseries_coeffs(s1; N) ∪ cached_get_selfseries_coeffs(s2; N)
 
     show() = "($s1 + $s2)"
 
@@ -943,7 +944,7 @@ function Base.:-(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
     getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s1, I...; N) - cached_getNum(s2, I...; N)
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-        s1.get_selfseries_coefficients(I...; N) ∪ s2.get_selfseries_coefficients(I...; N)
+        cached_get_selfseries_coeffs(s1, I...; N) ∪ cached_get_selfseries_coeffs(s2, I...; N)
 
     show() = "($s1 - $s2)"
 
@@ -961,7 +962,7 @@ function Base.:-(s::SymbolicSeries{D}, c::SymbolicSeries{0}) where D
         if all(==(0), I) && isequal(cached_getNum(c; N), cached_getNum(s, I...; N))
             Set()
         else
-            s.get_selfseries_coefficients(I...; N) ∪ c.get_selfseries_coefficients(N)
+            cached_get_selfseries_coeffs(s, I...; N) ∪ cached_get_selfseries_coeffs(c, N)
         end
     end
 
@@ -978,7 +979,7 @@ function Base.:-(s1::SymbolicSeries{0}, s2::SymbolicSeries{0})
         cached_getNum(s1 ;N) - cached_getNum(s2 ;N)
     end
 
-    get_selfseries_coefficients(;N=nothing) = s1.get_selfseries_coefficients(N) ∪ s2.get_selfseries_coefficients(N)
+    get_selfseries_coefficients(;N=nothing) = cached_get_selfseries_coeffs(s1; N) ∪ cached_get_selfseries_coeffs(s2; N)
 
     show() = "($s1 - $s2)"
 
@@ -1050,10 +1051,10 @@ function Base.:*(s1::SymbolicSeries{D}, s2::SymbolicSeries{D}) where D
         res = Set()
         for idx in ranges
             if !isequal(cached_getNum(s1, Tuple(idx)...; N), 0)
-                res = res ∪ s2.get_selfseries_coefficients((I.-Tuple(idx))...; N=N)
+                res = res ∪ cached_get_selfseries_coeffs(s2, (I.-Tuple(idx))...; N=N)
             end
             if !isequal(cached_getNum(s2, (I.-Tuple(idx))...; N), 0)
-                res = res ∪ s1.get_selfseries_coefficients(Tuple(idx)...; N=N)
+                res = res ∪ cached_get_selfseries_coeffs(s1, Tuple(idx)...; N=N)
             end
         end
         res
@@ -1156,7 +1157,7 @@ function swap_variables(s::EvaluatedSymbolicSeries{D}, new_vars::Vector) where D
     getNum(I::Vararg{Int, D}; N=nothing) = cached_getNum(s, I[perm]...; N)
 
     get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = 
-        s.series.get_selfseries_coefficients(I[perm]...; N)
+        cached_get_selfseries_coeffs(s.series, I[perm]...; N)
 
     SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
 end
@@ -1178,7 +1179,7 @@ function union_variables(s::EvaluatedSymbolicSeries{D1}, vars::Vector) where D1
     getNum(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? cached_getNum(s, I[1:D1]...; N) : 0
 
     get_selfseries_coefficients(I::Vararg{Int}; N=nothing) = all(==(0), I[D1+1:D]) ? 
-        s.series.get_selfseries_coefficients(I[1:D1]...; N=N) : Set()
+        cached_get_selfseries_coeffs(s.series, I[1:D1]...; N=N) : Set()
 
     SymbolicSeries(new_center, getNum, get_selfseries_coefficients, s.series.contains_selfseries, s.series.show)(new_vars...)
 end
@@ -1310,7 +1311,7 @@ function (d::Differential)(s::EvaluatedSymbolicSeries{D}) where D
                                                                         I[1:(x_idx-1)]..., I[x_idx]+1, I[(x_idx+1):D]...; 
                                                                         N=isnothing(N) ? nothing : N+1)
 
-    get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = new_s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N+1))
+    get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = cached_get_selfseries_coeffs(new_s.series, I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N+1))
     
     show() = "∂$(d.x)($s)"
 
@@ -1345,7 +1346,7 @@ function ∫(s::EvaluatedSymbolicSeries{D}, x) where D
                                           N=isnothing(N) ? nothing : N-1) / I[x_idx]
     end
 
-    get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = s.series.get_selfseries_coefficients(I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N-1))
+    get_selfseries_coefficients(I::Vararg{Int, D}; N=nothing) = cached_get_selfseries_coeffs(s.series, I[1:(x_idx-1)]..., I[x_idx]+1, I[x_idx+1:end]...; (N = isnothing(N) ? N : N-1))
     
     show() = "∫ ($s) d$x"
 
@@ -1526,7 +1527,7 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                     function get_selfseries_coefficients1(idcs::Vararg{Int}; N=nothing)
                         res = Set()
                         for idx in 0:idcs[other_x]
-                            res = res ∪ s.get_selfseries_coefficients(
+                            res = res ∪ cached_get_selfseries_coeffs(s,
                                 idcs[1:other_x-1]...,
                                 idcs[other_x] - idx,
                                 idcs[other_x+1:x_idx-1]...,
@@ -1566,7 +1567,7 @@ function evaluate(s::SymbolicSeries{D}, at::Vararg{Number, D}; _nbr_found=0) whe
                 getNum3(I::Int...; N=nothing) = cached_getNum(s, I[1:x_idx-1]..., 0, I[x_idx:end]...; N)
 
                 get_selfseries_coefficients3(idcs::Vararg{Int}; N=nothing) = 
-                    s.get_selfseries_coefficients(idcs[1:x_idx-1]...,0,idcs[x_idx:end]...; N)
+                    cached_get_selfseries_coeffs(s, idcs[1:x_idx-1]...,0,idcs[x_idx:end]...; N)
 
                 center = copy(s.center)
                 deleteat!(center, x_idx)
@@ -1713,11 +1714,11 @@ function get_involved_selfseries_coefficients(eq::SymbolicSeriesEquation{D},
 
     res = Set()
     if eq.LHS.contains_selfseries ≥ 1
-        res = res ∪ eq.LHS.get_selfseries_coefficients(I..., N=N)
+        res = res ∪ cached_get_selfseries_coeffs(eq.LHS, I..., N=N)
     end
 
     if eq.RHS.contains_selfseries ≥ 1
-        res = res ∪ eq.RHS.get_selfseries_coefficients(I..., N=N)
+        res = res ∪ cached_get_selfseries_coeffs(eq.RHS, I..., N=N)
     end
 
     return res
@@ -1800,6 +1801,19 @@ function cached_getNum(eq::SymbolicSeriesEquation, idx::Vararg{Int}; N=nothing)
     cached_getNum(eq.LHS, idx...; N) ~ cached_getNum(eq.RHS, idx...; N)
 end
 
+################## cached get_selfseries_coefficients function ###################
+
+const _selfseries_cache = IdDict{Any, Dict{Any, Any}}()
+clear_selfseries_cache() = empty(_selfseries_cache)
+
+function cached_get_selfseries_coeffs(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
+    if s.contains_selfseries == 0
+        return Set()
+    else
+        d = get!(() -> Dict{Any, Any}(), _selfseries_cache, s)
+        get!(() -> s.get_selfseries_coefficients(idx...; N), d, idx)
+    end
+end
 ######################### UnexpandedSymbolicSeriesEquation #######################
 
 """
@@ -2093,6 +2107,7 @@ end
 function compute_coefficients!(ps::PDESeries, N::Int; solver=QRFactorization, verbose::Int=0)
     compute_coefficients_aux!(ps, N; solver, verbose)
     clear_expand_cache()
+    clear_selfseries_cache()
 end
 
 ################################# LocalizedPDESeries ###################################
@@ -2301,5 +2316,6 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int;
 
     clear_num_cache()
     clear_expand_cache()
+    clear_selfseries_cache()
 
 end
