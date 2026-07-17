@@ -172,11 +172,19 @@ There are two benchmarks that can be used to test problems requiring LocalizedPD
 Some solvers from LinearSolve can't be used directly (solvers using sparsity or CUDA cores) so parser were written for them in the "custom\_solvers.jl" file
 
 \subsection{Another possible approach}
-%TODO
+
+The approach taken in this module is to represent power series algebraically, i.e, each series' coefficient can be represented and theoretically computed (though it may take very long).
+
+For series defined by partial differential equations (see \nameref{sec:PDESeriesAndLoc}), this is done by expanding the equations for each order using \code{Symbolics} representation. Though this may seem to be a natural approach, symbolic computing can be quite slow and thus, other approaches might be able to make expanding these equations faster (this being the main contribution to computation time). 
+
+One of these approaches would be to only use truncated power series rather than "theoretically infinite" power series. In Julia, this could be done using the "TaylorSeries" module (see ~\cite{taylorseriesmodule}). This module already implements most of the operations implemented in this program such as addition, multiplication, derivation, integration and even composition of a series of one variable with another. Thus, the only operation left to implement would be the composition of a series of multiple variables with another.
+Since this module does not use symbolic computing, and since the time needed to compute the coefficients once the equations have been expanded is negligeable in comparison with the time needed to expand the equations, this approach could make solving partial differential equations using high order truncated power series significantly faster, while still retaining the possibility of using symbolic parameters since "TaylorSeries.jl" already allows it.
+
+The approach chosen here though, might be adaptable to other types of series expansions such as Fourier series or other polynomial approximation. More details on that at the end of this document: see \nameref{sec:otherseries}
 
 \section{User guide}
 
-This user guide explains how to use the objects defined in "AlgebraicPowerSeries.jl" and "utilitaries.jl" files to expand functions into their Taylor series, solve Partial Differential Equations (PDE) and build the resulting functions' approximations.
+This user guide explains how to use the objects defined in "AlgebraicPowerSeries.jl" and "utils.jl" files to expand functions into their Taylor series, solve Partial Differential Equations (PDE) and build the resulting functions' approximations.
 
 \subsection{PowerSeries}
 
@@ -186,7 +194,7 @@ This user guide explains how to use the objects defined in "AlgebraicPowerSeries
     \item \code{compute\_coefficients!} -- PowerSeries is an interface to represent abstract power series. However, most uses require accessing its coefficients. To do so, these coefficients must first be computed up to a given order N by using \code{compute\_coefficients!(ps, N)} where ps is a PowerSeries.
     \item \code{ps.coefficients} -- The first way of accesing the previously computed coefficients is to access the \code{coefficients} attribute of the PowerSeries. This array is a \code{Array\{D, Vector\{T\}\}}. Since a PowerSeries represents in reality an array of scalar PowerSeries, to access the coefficients this way, one must first access the corresponding scalar series. The coefficients are then sorted in increasing order of their coefficients (i.e : $a_1 + a_2x + a_3y + a_4x^2 + a_5xy + a_6y^2 + ...$).
     For instance, one could do \code{ps.coefficients[1,2][3]} to access the coefficient of $y$ in a two variables series $x,y$ at the scalar index $(1,2)$
-    \item \code{getindex} -- The \code{getindex} method is another way of accessing a series coefficients. Calling for instance \code{ps[1,2]} will return a \code{ScalarSeriesSymbol} that can then be called using the \code{getindex} method an additionnal time which will return a \code{SeriesCoefficient}. Indexing a ScalarSeriesSymbol requires using the truncated indices, i.e the series is indexed as $a_{0,0} + a_{1,0}x + a_{1,1}y + a_{2,0}x^2 + a_{2,1}xy + a_{2,2}y^2 + ...$ (see \nameref{sec:coeffidx} for details on the different ways of indexing). Calling for instance \code{ps[1,2][1,1]} will return the corresponding \code{SeriesCoefficient}. Using then \code{getNum} on this \code{SeriesCoefficient} will return its value if it has already been computed and throw an error otherwise. Thus, \code{getNum(ps[1,2][1,1])} is the same as \code{ps.coefficients[1,2][3]}. 
+    \item \code{getindex} -- The \code{getindex} method is another way of accessing a series coefficients. Calling for instance \code{ps[1,2]} will return a \code{ScalarSeriesSymbol} that can then be called using the \code{getindex} method an additionnal time which will return a \code{SeriesCoefficient}. Indexing a ScalarSeriesSymbol requires using the truncated indices, i.e the series is indexed as $a_{0,0} + a_{1,0}x + a_{1,1}y + a_{2,0}x^2 + a_{2,1}xy + a_{2,2}y^2 + ...$ (see \nameref{sec:coeffidx} for details on the different ways of indexing). Calling for instance \code{ps[1,2][1,1]} will return the corresponding \code{SeriesCoefficient}. Using then \code{getNum2} on this \code{SeriesCoefficient} will return its value if it has already been computed and throw an error otherwise. Thus, \code{getNum2(ps[1,2][1,1])} is the same as \code{ps.coefficients[1,2][3]}. 
     See more details on \nameref{sec:sss} and \nameref{sec:sc} in the detailed documentation.
     \item \code{build\_matrix\_elt} -- Given a \code{PowerSeries ps}, it is possible to retrieve the function it represents (or rather its polynomial approximation). To do so, one can use \\ \code{build\_matrix\_elt(ps)}. This will return an \code{Array\{D\}} of functions of the \code{PowerSeries}' variables. Additionnaly, one can eventually provide a second argument N to only compute the polynomial function up to degree N. If N is greater than the order up to which the series has been computed, an error will be thrown
     \item \code{build} -- This works similarly to \code{build\_matrix\_elt} but instead of returning an array of functions, it returns a function that returns arrays. However, this seems to be less performant and the returned functions takes longer to evaluate
@@ -246,6 +254,7 @@ $$a^*_{\alpha_1, ..., \alpha_m} = \sum_{k_1=\alpha_1}^{+\infty} \sum_{k_2=\alpha
 As mentioned before, this way of computing the coefficients causes a loss of precision, as the coefficients expressions must be truncated. Furthermore, in the above formula, coefficients of a given order are computed using only coefficients of the orders above. Consequently, the loss of precision is more important on coefficients of higher orders. To compute these coefficients up to a given order N, the referenced \code{PowerSeries} coefficients are first computed up to order N, and then every coefficient's expression is truncated to use only these coefficients. If needed, it is however possible to give an additionnal named argument \code{trunc\_order} to the \code{compute\_coefficients!} method of \code{TranslatedSeries} to compute the coefficients of the referenced series up to this \code{trunc\_order} and then use these additionnal coefficients to compute the \code{TranslatedSeries}' coefficients up to order N.
 
 \subsection{PDESeries and LocalizedPDESeries}
+\label{sec:PDESeriesAndLoc}
 
 \code{PDESeries} and \code{LocalizedPDESeries} allow the user to generate series as a result of well-posed partial differential equations. 
 
@@ -465,7 +474,7 @@ compute_coefficients!(K_ps, N)
 
 \section{Detailed documentation}
 
-The objective of this part of the documentation is to explain how the program is constructed to give useful insight to adapt it to other uses. One can find more informations on every function and type defined in this project in the documentation of the code itself. Users who want to implement new functionalities are encouraged to check the existing utilitary functions in the "utilitaries.jl" file
+The objective of this part of the documentation is to explain how the program is constructed to give useful insight to adapt it to other uses. One can find more informations on every function and type defined in this project in the documentation of the code itself. Users who want to implement new functionalities are encouraged to check the existing utilitary functions in the "utils.jl" file
 
 \subsection{PowerSeries}
 
@@ -564,7 +573,7 @@ When working with power series, several conventions are possible to index the co
     This is the most natural convention, and it is indeed the most practical when performing operations on power series. Thus, it is the convention chosen for \code{SymbolicSeries} indexing.
 \end{itemize}
 
-Several functions, defined in the "utilitaries.jl" file allow to translate indices from one convetion to another. They all take a \code{Vararg} as an argument and return either a \code{Vector} when the result is truncated or fully symetric and an \code{Int} when the result is linear. These functions are the following:
+Several functions, defined in the "utils.jl" file allow to translate indices from one convetion to another. They all take a \code{Vararg} as an argument and return either a \code{Vector} when the result is truncated or fully symetric and an \code{Int} when the result is linear. These functions are the following:
 
 \begin{itemize}
     \item \code{convertIndices\_trunc\_to\_lin}
@@ -624,7 +633,58 @@ These caches can be cleared using the \code{clear\_num\_cache()} and \code{clear
  
 \subsubsection{UnexpandedEvaluatedSymbolicSeries}
 \label{sec:unexp}
-%TODO
+As stated previously, composition of power series is made possible using this formula:
+
+$$f(K(y_1, ..., y_n)) = f_0 + (K(y_1, \dots, y_n)-c)(f_1 + \sum_{i=2}^{+\infty}f_i(K(y_1, \dots, y_n))^{i-2})$$
+
+However, this recursion is infinite and thus needs to be truncated to the computation order. This means that it cannot be fully expanded before being passed to a \code{PDESeries} or \code{LocalizedPDESeries} like it is the case for other operations. To solve this problem, this program introduces \code{UnexpandedEvaluatedSymbolicSeries}: A wrapper for \code{EvaluatedSymbolicSeries} which tells the program to expand the formula at the time of computing the coefficients using the \code{expand} method. Its attributes are the following:
+
+\begin{itemize}
+    \item \code{func} -- Function to apply to the \code{args} vector. Must return the result of the expansion, i.e either an EvaluatedSymbolicSeries, a Number or another UnexpandedEvaluatedSymbolicSeries
+    \item \code{args::Vector} -- The arguments to pass to \code{func}
+    \item \code{expansion\_layer::Int} -- The current expansion layer. This is used to know how if the \code{last\_layer\_func} should be used instead of \code{func}
+    \item \code{last\_layer\_func} -- When the last layer of expansion is reached (i.e the computation order), apply this function to \code{args} instead of \code{func}. Result must either be an EvaluatedSymbolicSeries, a Number or an UnexpandedEvaluatedSymbolicSeries
+\end{itemize}
+
+Here is how the \code{expand} method is implemented:
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+    function expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::EvaluatedSymbolicSeries
+        if uess.expansion_layer >= N # if the computation order has been reached,
+            res = uess.last_layer_func() # apply last_layer_func
+            res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
+        else # otherwise
+            expanded_args = []
+            for arg in uess.args # first expand all arguments
+                if arg isa UnexpandedEvaluatedSymbolicSeries
+                    push!(expanded_args, expand(arg, N))
+                else
+                    push!(expanded_args, arg)
+                end
+            end
+            res = uess.func(expanded_args) # then apply func
+            res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
+        end
+    end
+\end{minted}
+
+And as a simple example, here is how the addition of \code{UnexpandedEvaluatedSymbolicSeries} is implemented:
+
+\begin{minted}[breaklines,mathescape=true, linenos, numbersep=3pt, frame=lines, fontsize=\small, framesep=2mm]{julia}
+    unexp_add(v::Vector) = v[1] + v[2]
+    Base.:+(uess1::UnexpandedEvaluatedSymbolicSeries,
+            uess2::UnexpandedEvaluatedSymbolicSeries) = 
+        UnexpandedEvaluatedSymbolicSeries(unexp_add, [uess1, uess2], 
+        max(uess1.expansion_layer, uess2.expansion_layer), 
+        () -> uess1.last_layer_func() + uess2.last_layer_func())
+
+\end{minted}
+
+All operations available on \code{EvaluatedSymbolicSeries} are also available for 
+
+\code{UnexpandedEvaluatedSymbolicSeries}.
+
+Finally, the \code{compute\_coefficients!} methods use a memoized version of \code{expand} named \code{cached\_expand} to avoid recomputing an expansion multiple times. The cache associated with this memoization is automatically cleared at the end of the \code{compute\_coefficients!} methods and can be manually cleared using \code{clear\_expand\_cache()}.
 
 \subsubsection{The compute\_coefficients! method}
 \label{sec:PDEScompute}
@@ -648,6 +708,22 @@ With the previous \code{getNum} method, it is possible to get equations between 
 \end{itemize}
 
 In the case of \code{PDESeries}, the indices corresponding to the equations used to compute the coefficients of previous orders are also discarded. 
+
+\subsection{How to adapt to other kinds of series development}
+\label{sec:otherseries}
+
+The structure of this module, even though, as stated in the introduction might not be optimal, might be adaptable to other types of series developments, while keeping several of the existing functions as is.
+
+Here is how it could be done:
+
+\begin{itemize}
+    \item Firstly, define a new Series abstract type to replace \code{PowerSeries}, with a similar interface
+    \item Secondly, add a subtype to compute the coefficients of this series expansion for known functions (here it was done with the \code{TaylorExpansionSeries} type)
+    \item Thirdly, adapt the \code{PDESeries} and \code{LocalizedPDESeries} types by redefining the operations of \code{SymbolicSeries}: addition, multiplication, derivation and integration. This can be done by changing the \code{getNum} and \code{get\_selfseries\_coefficients} methods
+    \item Finally, rewrite the \code{build\_matrix\_elt} and \code{build} functions to adapt them to this new way of expanding series (Base.show methods will need to be adapted as well)
+\end{itemize}
+
+The hard part here might be to redefine evaluation of the \code{SymbolicSeries} in some variables or constant, and to find a way of composing such series.
 
 \section{Appendix}
 \label{sec:app}

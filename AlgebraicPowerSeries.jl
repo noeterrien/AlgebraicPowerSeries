@@ -1854,7 +1854,7 @@ function cached_expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::Evaluat
     get!(_expand_cache, uess) do
         if uess.expansion_layer ≥ N
             res = uess.last_layer_func()
-            res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
+            res isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(res, N) : res
         else
             expanded_args = []
             for arg in uess.args
