@@ -4,11 +4,11 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ def96e04-ec4e-4b63-aedf-a286d2ca2721
-begin
-	import Pkg;
-	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
-end
+# # ╔═╡ def96e04-ec4e-4b63-aedf-a286d2ca2721
+# begin
+# 	import Pkg;
+# 	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
+# end
 
 # ╔═╡ e213daa3-c0cb-41ca-9ed9-d0a7cc99058b
 using GLMakie
@@ -53,7 +53,7 @@ md"""
 y_range = 0:0.001:1
 
 # ╔═╡ 58ec8f2a-2c2c-4e74-a743-e5559f7a886c
-N = 25
+N = 15
 
 # ╔═╡ b81d654b-f991-4031-b620-2dda90600849
 center = [0,0]
@@ -105,10 +105,11 @@ md"""
 """
 
 # ╔═╡ d10b8732-fa79-43c0-b951-833bddca4d04
-L_ps = PDESeries{Float64}(:L, [x, ξ], center, unknowns, [PDEs..., BCs...])
+L_ps = LocalizedPDESeries{Float64}(:L, [x, ξ], center, [PDEs..., BCs...], unknowns)
 
 # ╔═╡ 9202062c-2da6-4436-915b-2423531f4586
-compute_coefficients!(L_ps, N)
+using BenchmarkTools
+@profview compute_coefficients!(L_ps, N; verbose=2)
 
 # ╔═╡ 4d23a20f-9dc1-4cca-98e6-079529d10175
 md"""
@@ -133,6 +134,9 @@ L₂₂_res(ξ) = L_res[3,2](1, ξ)
 # ╔═╡ 69989d5e-84f0-4e4f-82a5-b4eba8177099
 L₂₁_other_res(x) = L_res[3,1](x, 0)
 
+# ╔═╡ 81d2c8b1-ee49-408f-b9e2-071f0b60535a
+map(y -> L_res[2,1](1 ,y), y_range)
+
 # ╔═╡ d8acec43-d542-4026-93b9-dcfb14340c75
 md"""
 # Plot and display
@@ -146,7 +150,7 @@ ax = Axis(fig[1,1]; title="kernels for N=$N", xlabel="ξ")
 
 # ╔═╡ 440a5da1-df93-4d30-951e-2a6c2690aa66
 for (kernel, name) in zip([L₁₁_res, L₁₂_res, L₂₁_res, L₂₂_res, L₂₁_other_res], 
-						  	["L₁₁(1, ξ)", "L₁₂(1, ξ)", "L₂₁(1, ξ)", "L₂₂(1, ξ)", "L₂₁(ξ, 0)"])
+						  	["L₁₁(1, ξ)", "L₁₂(1, ξ)", "L₂₁(1, ξ)", "L₂₂(1, ξ)","L₂₁(ξ, 0)"])
 	lines!(ax, y_range, kernel.(y_range); label=name)
 end
 
@@ -189,6 +193,7 @@ display(fig)
 # ╠═8850e81a-a20c-432c-a1b3-cb60717c8853
 # ╠═6c353b73-7a47-48c5-8bb7-3cfce05c938a
 # ╠═69989d5e-84f0-4e4f-82a5-b4eba8177099
+# ╠═81d2c8b1-ee49-408f-b9e2-071f0b60535a
 # ╟─d8acec43-d542-4026-93b9-dcfb14340c75
 # ╠═598b18b4-5d99-4bbc-a4b3-a544fcd34e71
 # ╠═31922153-bee1-434a-a518-7b61938a2ad8

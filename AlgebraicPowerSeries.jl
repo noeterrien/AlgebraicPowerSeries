@@ -1425,7 +1425,9 @@ end
 get_expansion_layer(uess::UnexpandedEvaluatedSymbolicSeries) = uess.expansion_layer
 
 function expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::EvaluatedSymbolicSeries
-    if uess.expansion_layer ≥ N  
+    if uess.expansion_layer > N
+        throw(ArgumentError("N too big !"))
+    elseif uess.expansion_layer == N  
         res = uess.last_layer_func() 
         res isa UnexpandedEvaluatedSymbolicSeries ? expand(res, N) : res
     else
@@ -1852,20 +1854,26 @@ expand(eq::SymbolicSeriesEquation, N::Int) = eq
 const _expand_cache = IdDict{Any, Any}()
 function cached_expand(uess::UnexpandedEvaluatedSymbolicSeries, N::Int)::EvaluatedSymbolicSeries
     get!(_expand_cache, uess) do
-        if uess.expansion_layer ≥ N
+        if uess.expansion_layer > N
+            throw(ArgumentError("N too big ! "))
+        elseif uess.expansion_layer == N
             res = uess.last_layer_func()
             res isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(res, N) : res
         else
             expanded_args = []
             for arg in uess.args
                 if arg isa UnexpandedEvaluatedSymbolicSeries
+                    println("test 1")
                     push!(expanded_args, cached_expand(arg, N))
                 else
+                    println("test 2")
                     push!(expanded_args, arg)
                 end
             end
+            println("starting func")
             res = uess.func(expanded_args)
-            res isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(uess, N) : res
+            println("ended func")
+            res isa UnexpandedEvaluatedSymbolicSeries ? cached_expand(res, N) : res
         end
     end
 end
@@ -2266,7 +2274,9 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int;
     unknowns = [unknowns...;]
 
     # expand UnexpandedSymbolicSeriesEquation if necessary
+    println("started expanding")
     ss_equations = map(eq -> cached_expand(eq, N), ps.equations)
+    println("done expanding UnexpandedEvaluatedSymbolicSeries")
 
     # then generate all equations of orders up to N
     eqs = Equation[]
