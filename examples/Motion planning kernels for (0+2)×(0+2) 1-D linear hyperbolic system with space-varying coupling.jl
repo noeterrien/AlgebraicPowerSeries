@@ -146,7 +146,7 @@ ax = Axis(fig[1,1]; title="kernels for N=$N", xlabel="ξ")
 
 # ╔═╡ 440a5da1-df93-4d30-951e-2a6c2690aa66
 for (kernel, name) in zip([L₁₁_res, L₁₂_res, L₂₁_res, L₂₂_res, L₂₁_other_res], 
-						  	["L₁₁(1, ξ)", "L₁₂(1, ξ)", "L₂₁(1, ξ)", "L₂₂(1, ξ)","L₂₁(ξ, 0)"])
+						  	["L₁₁(1, ξ)", "L₁₂(1, ξ)", "L₂₁(1, ξ)", "L₂₂(1, ξ)", "L₂₁(ξ, 0)"])
 	lines!(ax, y_range, kernel.(y_range); label=name)
 end
 

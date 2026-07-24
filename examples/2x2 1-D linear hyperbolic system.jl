@@ -51,7 +51,7 @@ md"""
 @variables x y
 
 # ╔═╡ 23cfd29e-4cd9-49a0-ba93-338ed60b4e57
-∂x, ∂y = Differential(x), Differential(y)
+∂x, ∂y = Differential(x), Differential(y); nothing
 
 # ╔═╡ 902b946a-a877-42b3-8c18-81a4fc9a4262
 md"""
