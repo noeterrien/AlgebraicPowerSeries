@@ -1787,28 +1787,15 @@ getNum2(sss::ScalarSeriesSymbol, idx::Vararg{Int}; N=nothing) = getNum2(sss[conv
 getNum2(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D = s.getNum(idx...; N)
 
 const _num_cache = IdDict{SymbolicSeries, Any}()
-const _num_cache_calls = Ref(0)
-const _num_cache_hits = Ref(0)
-const _getNum2_time_ns = Ref(0)
-const _setNumcache_time_ns = Ref(0)
 cached_getNum(x::Any, idx::Vararg{Int}; N=nothing) = getNum2(x, idx...; N)
 function cached_getNum(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
     if s.should_cache
-        _num_cache_calls[] += 1
         d = get!(() -> Dict{NTuple{D, Int}, Num}(), _num_cache, s)::Dict{NTuple{D, Int}, Num}
         if haskey(d, idx) 
-            _num_cache_hits[] += 1
             d[idx] 
         else
-            t0 = time_ns()
             val=getNum2(s, idx...; N)
-            t1 = time_ns()
-            _getNum2_time_ns[] += t1 - t0
-            t2 = time_ns()
             d[idx] = val
-            t3 = time_ns()
-            _setNumcache_time_ns[] += t3-t2
-            val
         end
     else
         getNum2(s, idx...; N)
@@ -1825,31 +1812,18 @@ end
 ################## cached get_selfseries_coefficients function ###################
 
 const _selfseries_cache = IdDict{SymbolicSeries, Any}()
-const _selfseries_cache_calls = Ref(0)
-const _selfseries_cache_hits = Ref(0)
-const _getselfseries_time_ns = Ref(0)
-const _setselfseriescache_time_ns = Ref(0)
 clear_selfseries_cache() = empty!(_selfseries_cache)
 
 function cached_get_selfseries_coeffs(s::SymbolicSeries{D}, idx::Vararg{Int, D}; N=nothing) where D
     if s.contains_selfseries == 0
         return Set()
     elseif s.should_cache
-        _selfseries_cache_calls[] += 1
         d = get!(() -> Dict{NTuple{D,Int}, Set{SeriesCoefficient}}(), _selfseries_cache, s)::Dict{NTuple{D, Int}, Set{SeriesCoefficient}}
         if haskey(d, idx) 
-            _selfseries_cache_hits[] += 1 
             d[idx] 
         else 
-            t0 = time_ns()
             val=s.get_selfseries_coefficients(idx...; N)
-            t1 = time_ns()
-            _getselfseries_time_ns[] += t1 - t0
-            t2 = time_ns()
             d[idx] = val
-            t3 = time_ns()
-            _setselfseriescache_time_ns[] += t3-t2
-            val
         end
     else
         s.get_selfseries_coefficients(idx...; N)
@@ -2093,10 +2067,8 @@ function compute_coefficients_aux!(ps::PDESeries{T}, N::Int;
     unknowns = [unknowns...;]
 
     # expand UnexpandedSymbolicSeriesEquation if necessary
-    t0 = time_ns()
     ss_equations = map(eq -> cached_expand(eq, N), ps.equations)
-    println("time needed to expand : $(time_ns()-t0/1e9) seconds")
-
+    
     # then generate all equations of order N
     eqs = Equation[]
     for ((eq_idx, eq), maxIntOrd) in zip(enumerate(ss_equations), ps.maxIntegrationOrders)
@@ -2144,11 +2116,6 @@ function compute_coefficients_aux!(ps::PDESeries{T}, N::Int;
     # update order
     ps.order = N
     verbose ≥ 1 && println("Coefficients computed up to order $N")
-
-    println("num_cache: ", length(_num_cache), " series objects, ",
-        sum(length(v) for v in values(_num_cache); init=0), " total (obj, idx) entries")
-    println("selfseries_cache: ", length(_selfseries_cache), " series objects, ",
-        sum(length(v) for v in values(_selfseries_cache); init=0), " total (obj, idx) entries")
 
     clear_num_cache()
     clear_expand_cache()
@@ -2313,9 +2280,7 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int;
     unknowns = [unknowns...;]
 
     # expand UnexpandedSymbolicSeriesEquation if necessary
-    println("started expanding")
     ss_equations = map(eq -> cached_expand(eq, N), ps.equations)
-    println("done expanding UnexpandedEvaluatedSymbolicSeries")
 
     # then generate all equations of orders up to N
     eqs = Equation[]
