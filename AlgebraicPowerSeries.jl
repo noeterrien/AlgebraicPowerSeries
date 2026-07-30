@@ -77,9 +77,8 @@ end
 """
 function build_matrix_elt(ps::PowerSeries, N::Int)
 
-    if N > ps.order 
-        compute_coefficients!(ps, N)
-    end
+    N > ps.order && throw(ArgumentError("Cannot build powerseries for which the \
+                                         coefficients have not been computed yet"))
 
     # handle N<0 case
     N >= 0 || return function(args...)
@@ -1775,7 +1774,7 @@ function getNum2(sc::SeriesCoefficient)::Number
                                  currently computed order. Involved SeriesCoefficient : 
                                  $sc"))
         else
-            sc.ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)]
+            sc.ps.coefficients[sc.index...][dynamic_convertIndices_trunc_to_lin(sc.indices...)]
         end
     else
         getSymbolics(sc)
@@ -2020,7 +2019,7 @@ end
 
 """
     compute_coefficients!(ps::PDESeries, N::Int; 
-                          solver=symbolic_linear_solve, 
+                          solver=QRFactorization, 
                           verbose::Int=0)
 
     Compute coefficients of ps up to order N.
@@ -2029,7 +2028,7 @@ end
 
     - `ps::PDESeries` -- the PowerSeries for which the coefficients should be computed
     - `N::Int` -- the order up to which the coefficients should be computed
-    - `solver=julia_default` -- The solver to be used. The solver should take as 
+    - `solver=QRFactorization` -- The solver to be used. The solver should take as 
       input a LinearSolve.LinearProblem and return a Vector of the coefficients values. 
       These values should be castable to the PDESeries T type parameter.
     - `verbose::Int=0` -- 
@@ -2109,7 +2108,7 @@ function compute_coefficients_aux!(ps::PDESeries{T}, N::Int;
 
     # fill in with the new coefficients
     for (sc, val) in zip(unknowns, res)
-        ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] = val
+        ps.coefficients[sc.index...][dynamic_convertIndices_trunc_to_lin(sc.indices...)...] = val
         sc.ps = ps
     end
 
@@ -2246,7 +2245,7 @@ expected_unknowns_upto(a::Array{<:ScalarSeriesSymbol}, D::Int, N::Int) = map(K -
 
 """
     compute_coefficients!(ps::LocalizedPDESeries, N::Int; 
-                          solver=julia_default, verbose=0, benchmark::Bool=false)
+                          solver=QRFactorization, verbose=0, benchmark::Bool=false)
 
     Compute coefficients of ps up to order N.
 
@@ -2324,7 +2323,7 @@ function compute_coefficients!(ps::LocalizedPDESeries{T}, N::Int;
 
     # fill in with the new coefficients
     for (sc, val) in zip(unknowns, res)
-        ps.coefficients[sc.index...][convertIndices_trunc_to_lin(sc.indices...)...] = val
+        ps.coefficients[sc.index...][dynamic_convertIndices_trunc_to_lin(sc.indices...)...] = val
     end
 
     # update order

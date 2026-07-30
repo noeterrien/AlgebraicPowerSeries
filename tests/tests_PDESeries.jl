@@ -174,7 +174,7 @@ end
 
 # parameters 
 
-N = 10 # order
+N = 5 # order
 center = [0,0]
 
 μ₁, μ₂ = 0.5, 0.3

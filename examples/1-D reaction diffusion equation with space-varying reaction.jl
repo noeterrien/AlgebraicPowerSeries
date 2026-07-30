@@ -10,27 +10,17 @@ begin
 	Pkg.activate("@v1.12.6"); # change to your own version of your global julia environment or add the dependencies manually to the Pluto environment
 end
 
-
-
 # ╔═╡ c481d149-fcb1-4e31-96ed-64abfd3704ea
 using GLMakie
-
-
 
 # ╔═╡ 61f3d5e2-45a2-40f1-bf23-b4dfacf7f0e3
 using Symbolics
 
-
-
 # ╔═╡ 527a13c9-61df-4f50-9179-e551218fc04d
 using PlutoUI
 
-
-
 # ╔═╡ ed023b55-5dd6-437c-8ff9-a83c471e1361
 include("../AlgebraicPowerSeries.jl"); nothing;
-
-
 
 # ╔═╡ 776674bd-e446-4286-b6cf-643e0e9f1e5b
 md"""
@@ -41,8 +31,6 @@ md"""
 
 # ╔═╡ 243d9572-93af-4a74-bbe2-b260214cff31
 import Latexify
-
-
 
 # ╔═╡ 06d7d816-5bb2-4457-97cc-7d6b72524111
 md"""
@@ -63,7 +51,7 @@ md"""
 """
 
 # ╔═╡ c00635e2-6915-4dbf-8675-ba16645f8182
-N=50
+N=100
 
 # ╔═╡ 08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 c = 3; nothing
@@ -71,9 +59,12 @@ c = 3; nothing
 # ╔═╡ 7636cea2-c846-4c71-bba7-7168ef006283
 ε = 1; nothing
 
+# ╔═╡ 3f5a2d98-574e-4380-8aa3-9726c087cfdb
+λ_full(x) = 3+x^2*sin(3*x)
+
 # ╔═╡ d1504ce0-6b32-488b-9392-ba824b979c8e
 begin
-	λ_ps = TaylorExpansionSeries{Float64}(:lambda, [x], [3 + x^2*sin(3*x)], [0])
+	λ_ps = TaylorExpansionSeries{Float64}(:lambda, [x], [λ_full(x)], [0])
 	compute_coefficients!(λ_ps, N)
 	λ = SymbolicSeries(λ_ps)
 end; nothing
@@ -150,8 +141,6 @@ begin
 	end
 end
 
-
-
 # ╔═╡ a01cd654-0590-4566-94db-a71040163e22
 fig = Figure(); nothing
 
@@ -205,8 +194,7 @@ md"""
 We define ``f_N`` as 
 
 ```math
-\begin{align*} f_N(x,y) &= \frac{λ(y)+c}{ε}K_N(x,y) - λ_{N-3}(y)(K_1(x,y)-K_0(x,y)) - \\
-& λ_{N-4}(y)(K_2(x,y)-K_0(x,y)) - ... - λ_0(y)(K_{N-2}(x,y)-K_{N-3}(x,y))
+\begin{align*} f_N(x,y) &= λR_N(y)K_N(x,y) + \sum_{j=0}^N(\sum_{k=0}^j K_{(N-j+k)k}λ_{j-k}))x^{N-j}y^j + \sum_{j=0}^{N-1}(\sum_{k=0}^j K_{(N-1-j+k)k}λ_{j-k}))x^{N-1-j}y^j
 \end{align*}
 ```
 """
@@ -244,142 +232,110 @@ Then
 This is the inequality implemented here
 """
 
-# ╔═╡ 99decbde-b72c-4cf5-ae30-a587148f50c1
-"""
-	λ_N(y; N)::Vector
-
-	Computes the values of λ_n(y) where n goes from 0 to N
-"""
-function λ_N(y; N)::Vector
-	res = [λ_ps.coefficients[1][1]]
-	pow = 1
-	for c in λ_ps.coefficients[1][2:N+1]
-		pow *= y
-		push!(res, res[end]+c*pow)
-	end
-	res
-end
-
-# ╔═╡ 8d9db1cd-6515-45a8-93ee-304e053f8102
-"""
-	f_N(x, y; N, K_N)
-
-	Computes the value of f_N(x,y)
-"""
-function f_N(x, y; N, K_N, λ_full)
-	λ_Ns = λ_N(y; N=N-3)
-	res = 0
-	coeffs_idx = 2
-	pow = 1
-	for i in 1:N-2
-		pow *= x
-		temp = 0
-		for j in 1:i
-			temp += K_ps.coefficients[1][coeffs_idx]*pow
-			coeffs_idx += 1
-			pow /= x
-			pow *= y
-		end
-		res -= temp*λ_Ns[N-1-i]
-	end
-	res + λ_full(y)*K_N(x,y)
-end
-
-# ╔═╡ be6bba23-dea2-4ca3-9bae-b5c9a2972f03
-"""
-	compute_bounds(N)
-
-	Computes M_λ, M_λ(N), M_f(N)
-"""
-function compute_bounds(N; max_range=y_range)
-	
-	λ_full = Symbolics.build_function(λ_ps.func[1], λ_ps.variables[1], expression=Val(false)); nothing
-	
-	λ_Nminus1 = build_matrix_elt(λ_ps, N-1)[1]
-	λR_N(y) = λ_full(y) - λ_Nminus1(y)
-	
-	M_λ = maximum(abs.(λ_full.(max_range)))
-	M_λN = maximum(abs.(λR_N.(max_range)))
-
+# ╔═╡ 163bc010-1a3b-40e0-8094-c5be51de8fa7
+function generate_f_N(N)
+	λ_N = build_matrix_elt(λ_ps, N)[1]
+	λR_N(y) = λ_full(y) - λ_N(y)
 	K_N = build_matrix_elt(K_ps, N)[1]
-	
-	maxi = 0
-	for x in max_range
-		for y in 0:step(max_range):x
-			val = abs(f_N(x,y; N, K_N, λ_full))
-			if maxi <  val 
-				maxi = val
+	function f_N(x,y)
+		
+		res = λR_N(y)*K_N(x,y)
+		
+		pow_x = x^N
+		pow_y = 1
+		for j in 0:N
+			temp = 0
+			for k in 0:j
+				K_coeff = K_ps.coefficients[1][dynamic_convertIndices_trunc_to_lin(N-j+k, k)]
+				λ_coeff = λ_ps.coefficients[1][j-k+1]
+				temp += K_coeff*λ_coeff
+			end
+			res += temp*pow_x*pow_y
+			pow_x = x == 0 ? 0 : pow_x/x
+			pow_y *= y
+		end
+
+		pow_x = x^(N-1)
+		pow_y = 1
+		for j in 0:N-1
+			temp = 0
+			for k in 0:j
+				K_coeff = K_ps.coefficients[1][dynamic_convertIndices_trunc_to_lin(N-1-j+k, k)]
+				λ_coeff = λ_ps.coefficients[1][j-k+1]
+				temp += K_coeff*λ_coeff
+			end
+			res += temp*pow_x*pow_y
+			pow_x = x == 0 ? 0 : pow_x/x
+			pow_y *= y
+		end
+
+		return res
+	end
+end
+
+# ╔═╡ eb303137-4670-4ee7-b7d7-319641a44d28
+function M_f(N; step=0.01)
+	f_N = generate_f_N(N)
+	M = abs(f_N(0,0))
+	for x in 0:step:1
+		for y in 0:step:x
+			M = max(M, abs(f_N(x,y)))
+		end
+	end
+	return M
+end
+
+# ╔═╡ 3a560ae8-5b57-4375-a0a1-afc87aeb8dd3
+begin
+	M_λ = maximum(map(λ_full, 0:0.01:1))
+	function M_λR(N; step=0.01)
+		λ_N = build_matrix_elt(λ_ps, N)[1]
+		λR_N(y) = λ_full(y) - λ_N(y)
+		maximum(map(λR_N, 0:step:1))
+	end
+end
+
+
+# ╔═╡ 7a48b90f-9102-42d3-8cb1-a3d379a53143
+function plot_errs(rg; num_estim_N, step=0.01)
+	K_Nmax = build_matrix_elt(K_ps, num_estim_N)[1]
+	fig = Figure()
+	ax = Axis(fig[1,1]; title="numerical error vs theoretical error", xlabel="N", yscale=log10)
+	num_errs = []
+	theo_errs = []
+	for N in rg
+		# numerical error
+		K_N = build_matrix_elt(K_ps, N)[1]
+		push!(num_errs, abs(K_Nmax(0,0)-K_N(0,0)))
+		for x in 0:step:1
+			for y in 0:step:x
+				num_errs[end] = max(num_errs[end], abs(K_Nmax(x,y)-K_N(x,y)))
 			end
 		end
+
+		# theoretical error
+		push!(theo_errs, exp(M_λ)*(M_λR(N-1; step)+M_f(N; step))/2*cosh(M_λ))
+
 	end
-	return M_λ, M_λN, maxi
+	scatterlines!(rg, num_errs; label="numerical errors")
+	scatterlines!(rg, theo_errs; label="theoretical bound")
+	fig, ax
 end
 
-# ╔═╡ 94e29e22-e21c-4fe3-8a8d-41a1daf4b1ff
-function abs_err(N)
-	M_λ, M_λN, M_fN = compute_bounds(N)
-	@show M_λ
-	@show M_λN
-	@show M_fN
-	return exp(M_λ)*(M_λN+M_fN)*cosh(M_λ)/2
-end
+# ╔═╡ c297015d-0c77-4267-b196-ea0df27fab86
+err_fig, err_ax = plot_errs(1:100; num_estim_N=100)
 
-# ╔═╡ 99cc6730-084e-4763-99a9-6edaf8710b09
-function L1_err(N)
-	M_λ, M_λN, M_fN = compute_bounds(N)
-	return exp(M_λ)*(M_λN+M_fN)*sinh(M_λ)/2
-end
+# ╔═╡ c67b8b71-2ea4-40f1-9046-5f41a8588acf
+vlines!(err_ax, [80]; color=:red)
 
-# ╔═╡ f96e1503-8925-4f70-930f-d57afd2a09ac
-begin
-	@show abs_err(10)
-	
-	@show L1_err(15)
-end
+# ╔═╡ a282b63d-459b-4a00-be7c-d42ee57b5ea3
+Legend(err_fig[1,2], err_ax)
 
-# ╔═╡ 8060a0e5-caf6-48f0-b172-0464cbbd6920
-function loc_err(y; N)
-	M_λ, M_λN, M_fN = compute_bounds(N)
-	return exp(M_λ)*(M_λN+M_fN)*cosh(M_λ*y)/2
-end
+# ╔═╡ 988ad4f4-69cb-4c79-a3ae-d7e023d09b35
+display(err_fig)
 
-# ╔═╡ 12c19ebd-1669-4fd7-90a2-10ad561a4211
-"""
-	plot_err(λ_ps, K_ps, N, maxOrder)
-
-	Displays the error as computed by the above majoration vs the real error
-
-	### Input
-
-	- `λ_ps` -- TaylorExpansionSeries representing λ
-	- `K_ps` -- PDESeries representing K
-	- `order` -- The order for which the error should be displayed
-	- `maxOrder=N` -- The order used to represent the "full" K
-
-	### Output
-
-	Displays a graph
-"""
-function plot_err(order, maxOrder=N)
-	Ms = map(y -> loc_err(y; N=order), y_range)
-	
-	K_full = y -> build_matrix_elt(K_ps, maxOrder)[1](1,y)
-	K_part = y -> build_matrix_elt(K_ps, order)[1](1,y)
-
-	errs = abs.(K_full.(y_range) .- K_part.(y_range))
-
-	fig = Figure()
-	ax = Axis(fig[1,1]; xlabel="y", title="approximated error versus theoretical majoration at order $order")
-	lines!(ax, y_range, Ms; label="Theoretical majoration")
-	lines!(ax, y_range, errs; label="numerical estimation")
-
-	fig[1,2] = Legend(fig, ax, "Legend", framevisible=false)
-
-	display(fig)
-end
-
-# ╔═╡ 28561d72-52d2-4c2e-9d06-bbe76b1fdf40
-plot_err(20, N)
+# ╔═╡ 2548d88b-d904-4563-ae72-19c5dc6fb290
+save("numerical error vs theoretical error.png", err_fig)
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
@@ -396,6 +352,7 @@ plot_err(20, N)
 # ╠═c00635e2-6915-4dbf-8675-ba16645f8182
 # ╠═08f7c3f2-fcd1-4d16-bd24-3dbe928c334e
 # ╠═7636cea2-c846-4c71-bba7-7168ef006283
+# ╠═3f5a2d98-574e-4380-8aa3-9726c087cfdb
 # ╠═d1504ce0-6b32-488b-9392-ba824b979c8e
 # ╟─e683d8aa-5c46-4eaf-8ae8-045fdd6cc7a2
 # ╠═467f87c5-4f6d-4466-a53a-fe231f16e0d1
@@ -421,12 +378,12 @@ plot_err(20, N)
 # ╟─0a4535ec-f9da-469d-a3e7-902ad72aaab5
 # ╟─00fa41cb-435a-4070-a234-57d6aaf1106b
 # ╟─e14afcf4-4782-4048-8c5a-5340fbe895cd
-# ╠═99decbde-b72c-4cf5-ae30-a587148f50c1
-# ╠═8d9db1cd-6515-45a8-93ee-304e053f8102
-# ╠═be6bba23-dea2-4ca3-9bae-b5c9a2972f03
-# ╠═94e29e22-e21c-4fe3-8a8d-41a1daf4b1ff
-# ╠═99cc6730-084e-4763-99a9-6edaf8710b09
-# ╠═f96e1503-8925-4f70-930f-d57afd2a09ac
-# ╠═8060a0e5-caf6-48f0-b172-0464cbbd6920
-# ╠═12c19ebd-1669-4fd7-90a2-10ad561a4211
-# ╠═28561d72-52d2-4c2e-9d06-bbe76b1fdf40
+# ╠═163bc010-1a3b-40e0-8094-c5be51de8fa7
+# ╠═eb303137-4670-4ee7-b7d7-319641a44d28
+# ╠═3a560ae8-5b57-4375-a0a1-afc87aeb8dd3
+# ╠═7a48b90f-9102-42d3-8cb1-a3d379a53143
+# ╠═c297015d-0c77-4267-b196-ea0df27fab86
+# ╠═c67b8b71-2ea4-40f1-9046-5f41a8588acf
+# ╠═a282b63d-459b-4a00-be7c-d42ee57b5ea3
+# ╠═988ad4f4-69cb-4c79-a3ae-d7e023d09b35
+# ╠═2548d88b-d904-4563-ae72-19c5dc6fb290

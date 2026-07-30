@@ -84,8 +84,6 @@ begin
 	λ1 = SymbolicSeries(λ1_ps)
 end
 
-#redirect_stdio(stdout="stdout.txt", stderr="stderr.txt") do
-
 # ╔═╡ 9d45f916-8031-4208-b7ba-03c14020c293
 md"""
 # A useful function
@@ -120,8 +118,8 @@ fig = Figure(); nothing
 
 # ╔═╡ 014d214e-4a5e-4836-a068-dac223bcf6e5
 titles = ["K at (0,0), λ at 0 (using PDESeries)",
-		  "K at (0,0), λ at 0, then K translated to (1,0)",
-		  "K at (0,0), λ at 0, then K translated to (1,0) with trunc_order=$maxOrder",
+		  "K at (0,0), λ at 0, then K translated to (1,1)",
+		  "K at (0,0), λ at 0, then K translated to (1,1) with trunc_order=$maxOrder",
 		  "K at (1,0), λ at 0",
 		  "K at (1,1), λ at 0",
 		  "K at (0,0), λ at 0 (using LocalizedPDESeries)", 
@@ -169,7 +167,7 @@ display(fig)
 
 # ╔═╡ 54e051f4-a7e3-4177-a45a-8ba46a46cdf1
 md"""
-# Translated Series with K expanded around (0,0) and λ around 0, then K translated to (1,0)
+# Translated Series with K expanded around (0,0) and λ around 0, then K translated to (1,1)
 """
 
 # ╔═╡ 2c51c206-4a9a-411e-9676-7ac66201eee5
@@ -178,7 +176,7 @@ md"""
 """
 
 # ╔═╡ f9094c92-2210-4ba7-9884-0888a3c147f6
-K2_ps = TranslatedSeries(:K2, K1_ps, centers[1])
+K2_ps = TranslatedSeries(:K2, K1_ps, centers[2])
 
 # ╔═╡ 9970cae3-8a24-43c4-9e9e-ae9364e1eeb5
 # compute coefficients and resulting polynomials
@@ -308,8 +306,6 @@ md"""
 
 # ╔═╡ fa5120e4-c62d-48fd-9005-1b4d78afae34
 save("Fixing divergence in 1-D reaction diffusion with space varying reaction.png", fig; px_per_unit=4)
-
-#end
 
 # ╔═╡ Cell order:
 # ╟─776674bd-e446-4286-b6cf-643e0e9f1e5b
