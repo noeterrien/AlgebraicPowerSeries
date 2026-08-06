@@ -95,12 +95,14 @@ function dynamic_convertIndices_trunc_to_lin(I::Vararg{Int64})
     if haskey(trunc_to_lin_dict, I)
         trunc_to_lin_dict[I]
     else
-        fst_nonzero = isnothing(findfirst(==(0), I)) ? length(I) : findfirst(==(0), I) - 1
-        if fst_nonzero == 0
-            return 1
-        else
-            new_idx = [I[1:fst_nonzero-1]..., [I[fst_nonzero]-1 for _ in fst_nonzero:length(I)]...]
-            return 1 + dynamic_convertIndices_trunc_to_lin(new_idx...)
+        trunc_to_lin_dict[I] = begin 
+            fst_nonzero = isnothing(findfirst(==(0), I)) ? length(I) : findfirst(==(0), I) - 1
+            if fst_nonzero == 0
+                1
+            else
+                new_idx = [I[1:fst_nonzero-1]..., [I[fst_nonzero]-1 for _ in fst_nonzero:length(I)]...]
+                1 + dynamic_convertIndices_trunc_to_lin(new_idx...)
+            end
         end
     end
 end
